@@ -10,7 +10,8 @@ import {
   Compass,
   Info,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  RotateCcw
 } from 'lucide-react';
 import type { GalaxyPreset, QualityTier, SimulationStats } from '../types/simulation';
 import { soundSynthesizer } from './SoundSynthesizer';
@@ -101,6 +102,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
   currentPreset,
   onSelectPreset,
   onSelectQuality,
+  onResetCamera,
 }) => {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -169,6 +171,17 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
             <Info className="w-4 h-4" />
           </button>
 
+          {onResetCamera && (
+            <button
+              onClick={onResetCamera}
+              className="hud-btn"
+              title="Reset Camera View (R)"
+              aria-label="Reset Camera"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          )}
+
           <button
             onClick={handleToggleAudio}
             className={`hud-btn ${isAudioPlaying ? 'active' : ''}`}
@@ -209,9 +222,11 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
             <div className="modal-interaction-guide">
               <h4>Navigation Controls</h4>
               <ul>
-                <li><span>Drag Left-Click</span> Orbit galaxy viewpoint</li>
+                <li><span>Left-Click Drag</span> Orbit around galaxy</li>
+                <li><span>Right-Click Drag</span> Pan viewpoint</li>
                 <li><span>Scroll Wheel</span> Smooth zoom in / out</li>
-                <li><span>Move Cursor</span> Gravitational attraction & parallax</li>
+                <li><span>Move Cursor</span> Gravitational attraction</li>
+                <li><span>R Key</span> Reset to default view</li>
               </ul>
             </div>
           </div>
@@ -223,7 +238,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
         {/* Interaction Hint Badge */}
         <div className="interaction-hint pointer-events-auto">
           <div className="pulse-dot" />
-          <span>DRAG TO ROTATE • SCROLL TO ZOOM • MOUSE CURSOR WARPS GRAVITY</span>
+          <span>DRAG — ORBIT • SCROLL — ZOOM • RIGHT-DRAG — PAN • R — RESET VIEW</span>
         </div>
 
         {/* Floating Preset Selector Drawer */}

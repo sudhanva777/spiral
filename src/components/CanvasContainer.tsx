@@ -55,6 +55,12 @@ export const CanvasContainer: React.FC = () => {
     }
   };
 
+  const handleResetCamera = () => {
+    if (engineRef.current) {
+      engineRef.current.resetCamera();
+    }
+  };
+
   if (!hasWebGL) {
     return <WebGLFallback />;
   }
@@ -70,6 +76,7 @@ export const CanvasContainer: React.FC = () => {
         currentPreset={currentPreset}
         onSelectPreset={handleSelectPreset}
         onSelectQuality={handleSelectQuality}
+        onResetCamera={handleResetCamera}
       />
     </div>
   );

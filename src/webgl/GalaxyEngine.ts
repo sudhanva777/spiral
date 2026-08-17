@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GalaxyParticles } from './particles/GalaxyParticles';
 import { NebulaParticles } from './particles/NebulaParticles';
 import { StarfieldParticles } from './particles/StarfieldParticles';
@@ -12,6 +13,7 @@ export class GalaxyEngine {
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
   private postProcessing: PostProcessingPipeline;
+  private controls: OrbitControls;
 
   private galaxy: GalaxyParticles;
   private nebula: NebulaParticles;
@@ -20,26 +22,20 @@ export class GalaxyEngine {
   private qualityTier: QualityTier;
   private particleCount: number;
 
-  // Interaction State
+  // Particle Gravitational Interaction State (preserved — independent of camera)
   private mouse2D = new THREE.Vector2(0, 0);
   private targetMouse2D = new THREE.Vector2(0, 0);
   private mouse3D = new THREE.Vector3(0, 0, 0);
   private raycaster = new THREE.Raycaster();
   private interactionPlane: THREE.Plane;
-  private isMouseDown = false;
-  private lastMouseX = 0;
-  private lastMouseY = 0;
 
-  // Camera Orbit & Parallax
-  private cameraBasePos = new THREE.Vector3(0, 22, 38);
-  private cameraTargetPos = new THREE.Vector3(0, 22, 38);
-  private cameraLookTarget = new THREE.Vector3(0, -1.0, 0);
-  private orbitAngleX = 0;
-  private orbitAngleY = 0;
-  private targetOrbitX = 0;
-  private targetOrbitY = 0;
-  private zoomDistance = 44.0;
-  private targetZoomDistance = 44.0;
+  // Default camera state for reset
+  private readonly defaultCameraPos = new THREE.Vector3(0, 22, 38);
+  private readonly defaultLookTarget = new THREE.Vector3(0, -1.0, 0);
+
+  // Smooth reset state
+  private isResetting = false;
+  private resetAlpha = 0;
 
   // Animation Timing & Entrance
   private clock = new THREE.Clock();
@@ -73,10 +69,10 @@ export class GalaxyEngine {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x020208);
 
-    // 2. Camera Setup (Perspective, slightly tilted above and to the side)
+    // 2. Camera Setup — starting position matches original composition exactly
     this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 800);
-    this.camera.position.copy(this.cameraBasePos);
-    this.camera.lookAt(this.cameraLookTarget);
+    this.camera.position.copy(this.defaultCameraPos);
+    this.camera.lookAt(this.defaultLookTarget);
 
     // 3. Renderer Setup
     const config = getQualityConfigForTier(qualityTier);
@@ -120,33 +116,66 @@ export class GalaxyEngine {
     // 6. Interaction Plane in Galaxy Equator (XZ Plane at Y=0)
     this.interactionPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
-    // 7. Event Listeners
+    // 7. OrbitControls — full 3D exploration with cinematic damping
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.target.copy(this.defaultLookTarget);
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.06;
+
+    // Zoom — continuous, generous range based on galaxy scale (maxRadius=38)
+    this.controls.enableZoom = true;
+    this.controls.zoomSpeed = 0.8;
+    this.controls.minDistance = 5.0;
+    this.controls.maxDistance = 200.0;
+
+    // Full 360° orbit — no angular restrictions
+    this.controls.minPolarAngle = 0.05;            // Nearly straight above
+    this.controls.maxPolarAngle = Math.PI - 0.05;   // Nearly straight below
+
+    // Pan
+    this.controls.enablePan = true;
+    this.controls.panSpeed = 0.6;
+
+    // Right-click for pan, left-click for orbit (defaults, but explicit)
+    this.controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN,
+    };
+
+    // Touch: one-finger orbit, two-finger zoom+pan
+    this.controls.touches = {
+      ONE: THREE.TOUCH.ROTATE,
+      TWO: THREE.TOUCH.DOLLY_PAN,
+    };
+
+    // Prevent default scroll so the canvas captures wheel for zoom
+    this.renderer.domElement.style.touchAction = 'none';
+
+    this.controls.update();
+
+    // 8. Event Listeners (only resize + mousemove for particle interaction)
     this.initEventListeners();
 
-    // 8. Start Loop
+    // 9. Start Loop
     this.animate = this.animate.bind(this);
     this.animate();
   }
 
   private initEventListeners() {
     this.onWindowResize = this.onWindowResize.bind(this);
-    this.onMouseMove = this.onMouseMove.bind(this);
-    this.onMouseDown = this.onMouseDown.bind(this);
-    this.onMouseUp = this.onMouseUp.bind(this);
-    this.onWheel = this.onWheel.bind(this);
-    this.onTouchStart = this.onTouchStart.bind(this);
-    this.onTouchMove = this.onTouchMove.bind(this);
-    this.onTouchEnd = this.onTouchEnd.bind(this);
+    this.onPointerMove = this.onPointerMove.bind(this);
+    this.onKeyDown = this.onKeyDown.bind(this);
 
     window.addEventListener('resize', this.onWindowResize, { passive: true });
-    window.addEventListener('mousemove', this.onMouseMove, { passive: true });
-    window.addEventListener('mousedown', this.onMouseDown, { passive: true });
-    window.addEventListener('mouseup', this.onMouseUp, { passive: true });
-    window.addEventListener('wheel', this.onWheel, { passive: false });
 
-    window.addEventListener('touchstart', this.onTouchStart, { passive: true });
-    window.addEventListener('touchmove', this.onTouchMove, { passive: true });
-    window.addEventListener('touchend', this.onTouchEnd, { passive: true });
+    // Mousemove for particle gravitational well — works independently of OrbitControls
+    // OrbitControls uses pointer events on the canvas; this listener on window captures
+    // mouse position without conflicting
+    window.addEventListener('mousemove', this.onPointerMove, { passive: true });
+
+    // Keyboard shortcut: R for reset camera
+    window.addEventListener('keydown', this.onKeyDown);
   }
 
   private onWindowResize() {
@@ -167,65 +196,24 @@ export class GalaxyEngine {
     this.starfield.setPixelRatio(config.dpr);
   }
 
-  private onMouseMove(e: MouseEvent) {
+  /**
+   * Captures mouse position for the particle gravitational well effect.
+   * This only updates targetMouse2D — it does NOT control the camera.
+   * OrbitControls handles all camera movement via its own pointer listeners on the canvas.
+   */
+  private onPointerMove(e: MouseEvent) {
     const x = (e.clientX / window.innerWidth) * 2 - 1;
     const y = -(e.clientY / window.innerHeight) * 2 + 1;
     this.targetMouse2D.set(x, y);
+  }
 
-    if (this.isMouseDown) {
-      const deltaX = e.clientX - this.lastMouseX;
-      const deltaY = e.clientY - this.lastMouseY;
-      this.targetOrbitX += deltaX * 0.005;
-      this.targetOrbitY = Math.max(-0.6, Math.min(0.6, this.targetOrbitY + deltaY * 0.005));
+  private onKeyDown(e: KeyboardEvent) {
+    // R key resets camera (only if no input element is focused)
+    if (e.key === 'r' || e.key === 'R') {
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+      this.resetCamera();
     }
-
-    this.lastMouseX = e.clientX;
-    this.lastMouseY = e.clientY;
-  }
-
-  private onMouseDown(e: MouseEvent) {
-    // Only track left click for rotation
-    if (e.button === 0) {
-      this.isMouseDown = true;
-      this.lastMouseX = e.clientX;
-      this.lastMouseY = e.clientY;
-    }
-  }
-
-  private onMouseUp() {
-    this.isMouseDown = false;
-  }
-
-  private onWheel(e: WheelEvent) {
-    e.preventDefault();
-    const zoomDelta = e.deltaY * 0.02;
-    this.targetZoomDistance = Math.max(18.0, Math.min(75.0, this.targetZoomDistance + zoomDelta));
-  }
-
-  private onTouchStart(e: TouchEvent) {
-    if (e.touches.length === 1) {
-      this.isMouseDown = true;
-      this.lastMouseX = e.touches[0].clientX;
-      this.lastMouseY = e.touches[0].clientY;
-      const x = (e.touches[0].clientX / window.innerWidth) * 2 - 1;
-      const y = -(e.touches[0].clientY / window.innerHeight) * 2 + 1;
-      this.targetMouse2D.set(x, y);
-    }
-  }
-
-  private onTouchMove(e: TouchEvent) {
-    if (e.touches.length === 1 && this.isMouseDown) {
-      const deltaX = e.touches[0].clientX - this.lastMouseX;
-      const deltaY = e.touches[0].clientY - this.lastMouseY;
-      this.targetOrbitX += deltaX * 0.006;
-      this.targetOrbitY = Math.max(-0.6, Math.min(0.6, this.targetOrbitY + deltaY * 0.006));
-      this.lastMouseX = e.touches[0].clientX;
-      this.lastMouseY = e.touches[0].clientY;
-    }
-  }
-
-  private onTouchEnd() {
-    this.isMouseDown = false;
   }
 
   public setPreset(preset: GalaxyPreset) {
@@ -259,6 +247,15 @@ export class GalaxyEngine {
     this.isEntranceComplete = false;
   }
 
+  /**
+   * Smoothly animates the camera back to its original default position and target.
+   * Uses lerp interpolation over ~60 frames for a cinematic return.
+   */
+  public resetCamera() {
+    this.isResetting = true;
+    this.resetAlpha = 0;
+  }
+
   private animate() {
     this.animationFrameId = requestAnimationFrame(this.animate);
 
@@ -274,7 +271,7 @@ export class GalaxyEngine {
       }
     }
 
-    // 2. Smooth Mouse Interpolation (Lerp & Damping)
+    // 2. Smooth Mouse Interpolation for particle gravitational well
     this.mouse2D.lerp(this.targetMouse2D, 0.06);
 
     // 3. Project 2D Mouse onto 3D Interaction Plane for Gravitational Well
@@ -284,43 +281,39 @@ export class GalaxyEngine {
       this.mouse3D.lerp(intersectionPoint, 0.08);
     }
 
-    // 4. Smooth Camera Orbit, Drift & Parallax
-    this.orbitAngleX += (this.targetOrbitX - this.orbitAngleX) * 0.05;
-    this.orbitAngleY += (this.targetOrbitY - this.orbitAngleY) * 0.05;
-    this.zoomDistance += (this.targetZoomDistance - this.zoomDistance) * 0.06;
+    // 4. Smooth Camera Reset (when active)
+    if (this.isResetting) {
+      this.resetAlpha += delta * 1.8; // ~0.55 seconds to complete
+      const t = Math.min(this.resetAlpha, 1.0);
+      // Smooth ease-out cubic
+      const ease = 1.0 - Math.pow(1.0 - t, 3.0);
 
-    // Ultra-slow ambient camera drift
-    const driftAngle = elapsedTime * 0.04;
-    const parallaxX = this.mouse2D.x * 3.5;
-    const parallaxY = this.mouse2D.y * 2.2;
+      this.camera.position.lerp(this.defaultCameraPos, ease * 0.08);
+      this.controls.target.lerp(this.defaultLookTarget, ease * 0.08);
 
-    const currentRadius = this.zoomDistance;
-    const elevation = 16.0 + this.orbitAngleY * 18.0 + parallaxY;
-    const horizontalAngle = driftAngle + this.orbitAngleX + parallaxX * 0.15;
+      if (t >= 1.0) {
+        this.isResetting = false;
+        this.resetAlpha = 0;
+      }
+    }
 
-    this.cameraTargetPos.set(
-      Math.sin(horizontalAngle) * currentRadius,
-      Math.max(4.0, elevation),
-      Math.cos(horizontalAngle) * currentRadius
-    );
+    // 5. Update OrbitControls (handles damping, camera transform)
+    this.controls.update();
 
-    this.camera.position.lerp(this.cameraTargetPos, 0.05);
-    this.camera.lookAt(this.cameraLookTarget);
-
-    // 5. Update Particle Subsystems
+    // 6. Update Particle Subsystems
     const effectiveTime = this.prefersReducedMotion ? elapsedTime * 0.2 : elapsedTime;
     this.galaxy.update(effectiveTime, this.mouse3D, this.entranceProgress, 0.6);
     this.nebula.update(effectiveTime, this.entranceProgress);
     this.starfield.update(effectiveTime, this.entranceProgress);
 
-    // 6. Render Post-Processing Pipeline
+    // 7. Render Post-Processing Pipeline
     if (this.postProcessing.isEnabled()) {
       this.postProcessing.render();
     } else {
       this.renderer.render(this.scene, this.camera);
     }
 
-    // 7. FPS Telemetry Calculation
+    // 8. FPS Telemetry Calculation
     this.frameCount++;
     const now = performance.now();
     if (now - this.lastFpsUpdate >= 500) {
@@ -329,13 +322,14 @@ export class GalaxyEngine {
       this.lastFpsUpdate = now;
 
       if (this.statsCallback) {
+        const camDist = Math.round(this.camera.position.distanceTo(this.controls.target));
         this.statsCallback({
           fps: this.currentFps,
           particleCount: this.particleCount,
           drawCalls: this.renderer.info.render.calls,
           tier: this.qualityTier,
           mouseNormalized: { x: this.mouse2D.x, y: this.mouse2D.y },
-          cameraDistance: Math.round(this.zoomDistance),
+          cameraDistance: camDist,
         });
       }
     }
@@ -347,14 +341,10 @@ export class GalaxyEngine {
     }
 
     window.removeEventListener('resize', this.onWindowResize);
-    window.removeEventListener('mousemove', this.onMouseMove);
-    window.removeEventListener('mousedown', this.onMouseDown);
-    window.removeEventListener('mouseup', this.onMouseUp);
-    window.removeEventListener('wheel', this.onWheel);
-    window.removeEventListener('touchstart', this.onTouchStart);
-    window.removeEventListener('touchmove', this.onTouchMove);
-    window.removeEventListener('touchend', this.onTouchEnd);
+    window.removeEventListener('mousemove', this.onPointerMove);
+    window.removeEventListener('keydown', this.onKeyDown);
 
+    this.controls.dispose();
     this.galaxy.dispose();
     this.nebula.dispose();
     this.starfield.dispose();
