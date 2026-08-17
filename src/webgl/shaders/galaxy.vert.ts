@@ -4,13 +4,14 @@ export const galaxyVertexShader = /* glsl */ `
 ${glslSimplexNoise}
 
 // Custom Attributes
+attribute vec3 aColor;       // Per-particle linear RGB computed from galaxy palette & morphology
 attribute float aSize;
 attribute float aScale;
 attribute float aRandomness;
 attribute float aPhase;
-attribute float aBranch;     // 0.0 = warm magenta/pink branch, 1.0 = electric blue branch, 2.0 = core, 3.0 = halo/dust
+attribute float aBranch;     // Arm / branch index
 attribute float aDistance;   // Normalized distance from center (0.0 to 1.0)
-attribute float aLayer;      // 0 = core, 1 = inner arm, 2 = outer arm, 3 = energy stream, 4 = dust
+attribute float aLayer;      // 0 = core, 1 = inner arm/ring, 2 = outer arm, 3 = energy stream/nursery, 4 = dust
 attribute float aCoreType;   // -1 = non-core, 0 = micro dust, 1 = small luminous, 2 = filament, 3 = energy knot
 attribute vec3 aInitialPos;
 
@@ -22,13 +23,14 @@ uniform float uPixelRatio;
 uniform float uTurbulence;
 uniform float uSpiralTightness;
 uniform float uEntranceProgress;  // 0.0 to 1.0 for cinematic reveal
-uniform vec3 uMousePos3D;        // Smooth 3D mouse coordinate in world space
+uniform vec3 uMousePos3D;        // Smooth 3D mouse coordinate in galaxy local space
 uniform float uMouseInfluence;   // Dynamic gravitational pull strength
 uniform float uTilt;             // Galaxy tilt parameter
 uniform float uCoreFalloff;      // Radial light falloff steepness
+uniform float uLODFactor;        // 1.0 (close full LOD) to 0.35 (distant representation)
 
-// Phase 4 & 5 Uniforms: Click Energy Pulse & Core Inspection
-uniform vec3 uPulseOrigin;       // 3D origin of the expanding energy wave
+// Click Energy Pulse & Core Inspection
+uniform vec3 uPulseOrigin;       // 3D origin of the expanding energy wave in local space
 uniform float uPulseProgress;    // 0.0 to 1.0 expansion progress
 uniform float uPulseStrength;    // Amplitude of the wave
 uniform float uCoreInspection;   // 0.0 (normal) to 1.0 (close-up inspection mode)
@@ -45,30 +47,6 @@ varying float vCoreType;
 varying float vAngular;          // Angular position for filament/gap patterns
 varying float vPulseFactor;      // Luminous wavefront flash intensity
 varying float vCoreInspection;   // LOD factor for fragment shader
-
-// Palette definitions in linear RGB — outer galaxy & arms
-const vec3 cDarkViolet    = vec3(0.149, 0.067, 0.239); // #26113D
-const vec3 cPurple        = vec3(0.388, 0.239, 0.620); // #633D9E
-const vec3 cElectricViolet= vec3(0.545, 0.333, 1.000); // #8B55FF
-const vec3 cMagenta       = vec3(0.843, 0.361, 1.000); // #D75CFF
-const vec3 cPink          = vec3(1.000, 0.459, 0.784); // #FF75C8
-const vec3 cSoftRose      = vec3(1.000, 0.643, 0.843); // #FFA4D7
-const vec3 cWarmPeach     = vec3(1.000, 0.773, 0.549); // #FFC58C
-
-const vec3 cElectricBlue  = vec3(0.224, 0.420, 1.000); // #396BFF
-const vec3 cBrightBlue    = vec3(0.369, 0.549, 1.000); // #5E8CFF
-const vec3 cIceBlue       = vec3(0.616, 0.722, 1.000); // #9DB8FF
-const vec3 cWhiteBlue     = vec3(0.863, 0.902, 1.000); // #DCE6FF
-
-// Core-specific refined palette — warm→cool gradient
-const vec3 cCoreWhite     = vec3(1.000, 0.973, 1.000); // #FFF8FF
-const vec3 cCoreBlueWht   = vec3(0.918, 0.953, 1.000); // #EAF3FF
-const vec3 cCorePeach     = vec3(1.000, 0.839, 0.910); // #FFD6E8
-const vec3 cCorePink      = vec3(1.000, 0.753, 0.835); // #FFC0D5
-const vec3 cCoreMagenta   = vec3(1.000, 0.561, 0.784); // #FF8FC8
-const vec3 cCoreViolet    = vec3(0.914, 0.471, 0.816); // #E978D0
-const vec3 cCoreDeepVio   = vec3(0.722, 0.365, 0.922); // #B85DEB
-const vec3 cCorePurple    = vec3(0.569, 0.310, 0.878); // #914FE0
 
 void main() {
   vec3 pos = aInitialPos;
@@ -95,20 +73,18 @@ void main() {
   pos.y += verticalWave + curl.y * 1.2;
   pos.xz += curl.xz * (0.8 + normDist * 0.5);
 
-  // 3. Phase 3: Interactive Gravitational Lensing & Relativistic Frame Dragging
+  // 3. Interactive Gravitational Lensing & Relativistic Frame Dragging (in local space)
   vec3 diffToMouse = uMousePos3D - pos;
   float distToMouse = length(diffToMouse);
   if (distToMouse > 0.001) {
     float gravityFalloff = smoothstep(18.0, 0.0, distToMouse);
     float pull = gravityFalloff * gravityFalloff * uMouseInfluence * 2.8;
-    // Frame-dragging swirl around cursor
     vec3 tangent = cross(normalize(diffToMouse + vec3(0.0001, 0.0, 0.0)), vec3(0.0, 1.0, 0.0));
     pos += normalize(diffToMouse) * (pull * 1.25) + tangent * (pull * 0.75);
     pos.y += sin(distToMouse * 0.6 - uTime * 2.5) * (gravityFalloff * uMouseInfluence * 0.5);
   }
 
-  // 4. Phase 4: Click Energy Wave Pulse
-  // Radial expanding wavefront from uPulseOrigin
+  // 4. Click Energy Wave Pulse
   float pulseWaveRadius = uPulseProgress * 44.0;
   float distToPulse = length(pos - uPulseOrigin);
   float pulseDistDiff = abs(distToPulse - pulseWaveRadius);
@@ -120,95 +96,30 @@ void main() {
     pos.y += sin(pulseDistDiff * 1.8) * (pulseWaveFactor * 1.2);
   }
 
-  // 5. Cinematic Entrance Materialization (Expand outward & spin in)
+  // 5. Cinematic Entrance Materialization
   float entranceDelay = smoothstep(0.0, 1.0, uEntranceProgress * 1.4 - normDist * 0.5);
   pos *= clamp(entranceDelay, 0.001, 1.0);
 
-  // 6. Compute angular position for filament/gap patterns in fragment shader
+  // 6. Angular position for filament/gap modulation
   float angularPos = atan(pos.z, pos.x);
 
-  // 7. Compute Dynamic Color Spectrum
-  vec3 col = cDarkViolet;
+  // 7. Base Color from configuration attribute + subtle noise pulses
+  vec3 col = aColor;
   float nVal = snoise(vec3(pos.xz * 0.05, uTime * 0.08));
-
-  if (aBranch < 0.8) {
-    // Warm Magenta / Pink / Peach Arm
-    if (normDist < 0.25) {
-      col = mix(cWarmPeach, cSoftRose, normDist * 4.0);
-    } else if (normDist < 0.55) {
-      col = mix(cSoftRose, cPink, (normDist - 0.25) * 3.33);
-    } else if (normDist < 0.8) {
-      col = mix(cPink, cMagenta, (normDist - 0.55) * 4.0);
-    } else {
-      col = mix(cMagenta, cPurple, (normDist - 0.8) * 5.0);
-    }
-  } else if (aBranch < 1.8) {
-    // Electric Blue / Ice Blue Stream
-    if (normDist < 0.25) {
-      col = mix(cWhiteBlue, cIceBlue, normDist * 4.0);
-    } else if (normDist < 0.55) {
-      col = mix(cIceBlue, cBrightBlue, (normDist - 0.25) * 3.33);
-    } else if (normDist < 0.8) {
-      col = mix(cBrightBlue, cElectricBlue, (normDist - 0.55) * 4.0);
-    } else {
-      col = mix(cElectricBlue, cDarkViolet, (normDist - 0.8) * 5.0);
-    }
-  } else if (aBranch < 2.5) {
-    // ---------------------------------------------------------------
-    // Luminous Galactic Core — 6-stop warm→cool gradient
-    // Tiny white center → blue-white → peach → pink → magenta → violet
-    // ---------------------------------------------------------------
-    float coreNormDist = clamp(dist / 5.5, 0.0, 1.0); // Normalize to core radius
-
-    if (coreNormDist < 0.06) {
-      // Central white point — extremely small
-      col = mix(cCoreWhite, cCoreBlueWht, coreNormDist / 0.06);
-    } else if (coreNormDist < 0.15) {
-      // Inner transition: blue-white → warm peach
-      col = mix(cCoreBlueWht, cCorePeach, (coreNormDist - 0.06) / 0.09);
-    } else if (coreNormDist < 0.30) {
-      // Warm peach → pink
-      col = mix(cCorePeach, cCorePink, (coreNormDist - 0.15) / 0.15);
-    } else if (coreNormDist < 0.50) {
-      // Pink → magenta
-      col = mix(cCorePink, cCoreMagenta, (coreNormDist - 0.30) / 0.20);
-    } else if (coreNormDist < 0.75) {
-      // Magenta → violet
-      col = mix(cCoreMagenta, cCoreViolet, (coreNormDist - 0.50) / 0.25);
-    } else {
-      // Violet → deep violet / purple (transition into arms)
-      col = mix(cCoreViolet, cCoreDeepVio, clamp((coreNormDist - 0.75) / 0.25, 0.0, 1.0));
-    }
-
-    // Slight color variation based on noise to break uniformity
-    float coreNoiseVar = snoise(vec3(pos.xz * 0.15, uTime * 0.05 + aPhase)) * 0.08;
-    col += vec3(coreNoiseVar * 0.5, coreNoiseVar * 0.3, coreNoiseVar);
-
-  } else {
-    // Outer Dust / Halo
-    col = mix(cDarkViolet, cPurple, aRandomness);
-  }
-
-  // Add subtle energetic noise pulses
-  col += vec3(max(0.0, nVal)) * 0.25;
+  col += vec3(max(0.0, nVal)) * 0.18;
 
   vColor = col;
 
-  // Core alpha: gentle distance-based boost instead of flat 1.35
+  // Alpha computation with core brightness boost and dust attenuation
   vAlpha = (0.35 + aRandomness * 0.65) * entranceDelay;
   if (aLayer == 0.0) {
-    // Controlled brightness: brighter near center, fading outward
     float coreNorm = clamp(dist / 5.5, 0.0, 1.0);
     float coreBrightBoost = 1.0 + 0.25 * (1.0 - coreNorm);
-
-    // Energy knots get a brightness bump
     if (aCoreType == 3.0) coreBrightBoost += 0.3;
-    // Filaments slightly brighter than dust
     if (aCoreType == 2.0) coreBrightBoost += 0.1;
-
     vAlpha *= coreBrightBoost;
   }
-  if (aLayer == 4.0) vAlpha *= 0.45; // Outer dust is dimmer
+  if (aLayer == 4.0) vAlpha *= 0.45;
 
   vDistance = normDist;
   vBranch = aBranch;
@@ -223,38 +134,32 @@ void main() {
   vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
   vDepth = -mvPosition.z;
 
-  // Base Particle Sizing with DPI
   float baseSize = aSize * aScale * uSizeMultiplier;
 
   if (aLayer == 0.0) {
-    // Core particles: distance-dependent sizing (smaller near center = finer detail)
     float coreNorm = clamp(dist / 5.5, 0.0, 1.0);
-    float coreSizeMod = 0.6 + coreNorm * 0.6; // 0.6x at center, 1.2x at core edge
+    float coreSizeMod = 0.6 + coreNorm * 0.6;
+    if (aCoreType == 0.0) coreSizeMod *= 0.8;
+    if (aCoreType == 2.0) coreSizeMod *= 0.85;
+    if (aCoreType == 3.0) coreSizeMod *= 1.1;
 
-    // Sub-type sizing adjustments
-    if (aCoreType == 0.0) coreSizeMod *= 0.8;  // Micro dust: smallest
-    if (aCoreType == 2.0) coreSizeMod *= 0.85; // Filaments: thin
-    if (aCoreType == 3.0) coreSizeMod *= 1.1;  // Energy knots: slightly larger
-
-    // Phase 5: Core Inspection LOD sizing optimization
-    // When camera is close to core, refine particle size so individual particles remain distinct
     float inspectionSizeMod = mix(1.0, 0.75, uCoreInspection);
     coreSizeMod *= inspectionSizeMod;
-
     baseSize *= coreSizeMod;
   }
-  if (aLayer == 4.0) baseSize *= 0.7; // Outer dust micro size
+  if (aLayer == 4.0) baseSize *= 0.7;
 
-  // 3D depth modulation for core particles: closer to camera = slightly larger/brighter
   if (aLayer == 0.0) {
     float depthBias = clamp(1.0 + pos.y * 0.04, 0.85, 1.15);
     baseSize *= depthBias;
   }
 
-  // Phase 2: Physical Depth-based sizing curve
-  // Near particles slightly larger, far particles slightly smaller (smooth continuous transition)
+  // Physical Depth-based sizing curve
   float depthSizeMod = clamp(1.0 + (35.0 - vDepth) * 0.007, 0.75, 1.30);
   baseSize *= depthSizeMod;
+
+  // Scale-Aware LOD Point Size Scaling
+  baseSize *= mix(0.75, 1.0, uLODFactor);
 
   // Perspective point size attenuation
   gl_PointSize = baseSize * (160.0 / -mvPosition.z) * uPixelRatio;

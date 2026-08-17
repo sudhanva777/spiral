@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { GalaxyParticles } from './particles/GalaxyParticles';
 import { NebulaParticles } from './particles/NebulaParticles';
 import { StarfieldParticles } from './particles/StarfieldParticles';
 import { ForegroundDustParticles } from './particles/ForegroundDustParticles';
+import { GalaxyInstance } from './galaxies/GalaxyInstance';
+import { UNIVERSE_GALAXIES } from './galaxies/registry';
 import { PostProcessingPipeline } from './PostProcessing';
 import { getQualityConfigForTier } from './utils/deviceDetection';
 import type { GalaxyPreset, InteractionState, QualityTier, SimulationStats } from '../types/simulation';
+import type { UniverseState } from '../types/universe';
 
 export class GalaxyEngine {
   private container: HTMLElement;
@@ -16,8 +18,11 @@ export class GalaxyEngine {
   private postProcessing: PostProcessingPipeline;
   private controls: OrbitControls;
 
-  // Particle Subsystems (Multi-Layer Depth & Parallax)
-  private galaxy: GalaxyParticles;
+  // Universe Galaxy Instances
+  private galaxies: Map<string, GalaxyInstance> = new Map();
+  private activeGalaxyId = 'galaxy01';
+
+  // Environmental Particle Subsystems
   private nebula: NebulaParticles;
   private starfield: StarfieldParticles;
   private foregroundDust: ForegroundDustParticles;
@@ -28,12 +33,13 @@ export class GalaxyEngine {
   // State Management
   private currentState: InteractionState = 'CINEMATIC';
   private stateChangeCallback?: (state: InteractionState) => void;
+  private universeStateCallback?: (state: UniverseState) => void;
 
   // Phase 3: Interactive Gravitational Field State
   private mouse2D = new THREE.Vector2(0, 0);
   private targetMouse2D = new THREE.Vector2(0, 0);
-  private mouse3D = new THREE.Vector3(0, 0, 0);
-  private targetMouse3D = new THREE.Vector3(0, 0, 0);
+  private worldMouse3D = new THREE.Vector3(0, 0, 0);
+  private targetWorldMouse3D = new THREE.Vector3(0, 0, 0);
   private raycaster = new THREE.Raycaster();
   private interactionPlane: THREE.Plane;
   private mouseInfluence = 0.0;
@@ -47,27 +53,26 @@ export class GalaxyEngine {
   private pulseProgress = 0.0;
   private pulseStrength = 0.0;
   private pulseActive = false;
-  private pulseDuration = 1.6; // seconds
+  private pulseDuration = 1.6;
   private pulseElapsed = 0.0;
 
-  // Phase 5 & Camera Transition State
-  private readonly defaultCameraPos = new THREE.Vector3(0, 22, 38);
-  private readonly defaultLookTarget = new THREE.Vector3(0, -1.0, 0);
-  private readonly coreInspectionPos = new THREE.Vector3(0, 3.8, 8.5);
-  private readonly coreLookTarget = new THREE.Vector3(0, 0, 0);
+  // Camera & Navigation Offsets
+  private readonly defaultCamOffset = new THREE.Vector3(0, 22, 38);
+  private readonly defaultLookOffset = new THREE.Vector3(0, -1.0, 0);
+  private readonly coreInspectOffset = new THREE.Vector3(0, 3.8, 8.5);
 
   private isInspectingCore = false;
-  private coreInspectionFactor = 0.0; // 0.0 (normal) to 1.0 (inspection)
+  private coreInspectionFactor = 0.0;
   private targetCoreInspection = 0.0;
 
-  // Cinematic Camera Transitions
+  // Cinematic Camera Transitions (Navigation & Core Inspection)
   private isTransitioningCamera = false;
   private camTransitionStartPos = new THREE.Vector3();
   private camTransitionTargetPos = new THREE.Vector3();
   private camTransitionStartLook = new THREE.Vector3();
   private camTransitionTargetLook = new THREE.Vector3();
   private camTransitionProgress = 0.0;
-  private camTransitionDuration = 1.0; // seconds
+  private camTransitionDuration = 1.0;
 
   // Double Tap Tracking (Mobile)
   private lastTapTime = 0;
@@ -89,12 +94,14 @@ export class GalaxyEngine {
     container: HTMLElement,
     qualityTier: QualityTier = 'ultra',
     onStatsUpdate?: (stats: SimulationStats) => void,
-    onStateChange?: (state: InteractionState) => void
+    onStateChange?: (state: InteractionState) => void,
+    onUniverseStateChange?: (state: UniverseState) => void
   ) {
     this.container = container;
     this.qualityTier = qualityTier;
     this.statsCallback = onStatsUpdate;
     this.stateChangeCallback = onStateChange;
+    this.universeStateCallback = onUniverseStateChange;
 
     const width = container.clientWidth || window.innerWidth;
     const height = container.clientHeight || window.innerHeight;
@@ -106,9 +113,9 @@ export class GalaxyEngine {
     this.scene.background = new THREE.Color(0x020208);
 
     // 2. Camera Setup — Starting position matches default composition
-    this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 800);
-    this.camera.position.copy(this.defaultCameraPos);
-    this.camera.lookAt(this.defaultLookTarget);
+    this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1400);
+    this.camera.position.copy(this.defaultCamOffset);
+    this.camera.lookAt(this.defaultLookOffset);
 
     // 3. Renderer Setup
     const config = getQualityConfigForTier(qualityTier);
@@ -128,18 +135,24 @@ export class GalaxyEngine {
 
     container.appendChild(this.renderer.domElement);
 
-    // 4. Particle Subsystems (Multi-Layer Depth & Parallax)
-    this.galaxy = new GalaxyParticles(config.particleCount, 3.2);
+    // 4. Universe Galaxies Setup (Galaxy 01 + Galaxy 02 in the same continuous 3D scene)
+    UNIVERSE_GALAXIES.forEach((galaxyConfig) => {
+      // Allocate particle count per galaxy based on tier
+      const galaxyInstance = new GalaxyInstance(galaxyConfig, config.particleCount);
+      this.galaxies.set(galaxyConfig.id, galaxyInstance);
+      this.scene.add(galaxyInstance.group);
+    });
+
+    // 5. Environmental Subsystems (Deep Universe Starfield, Nebula, Foreground Dust)
     this.nebula = new NebulaParticles(config.nebulaCount);
     this.starfield = new StarfieldParticles(config.starCount);
     this.foregroundDust = new ForegroundDustParticles(config.foregroundDustCount);
 
     this.scene.add(this.starfield.points);
     this.scene.add(this.nebula.points);
-    this.scene.add(this.galaxy.points);
     this.scene.add(this.foregroundDust.points);
 
-    // 5. Post-Processing Pipeline
+    // 6. Post-Processing Pipeline
     this.postProcessing = new PostProcessingPipeline(
       this.renderer,
       this.scene,
@@ -151,28 +164,25 @@ export class GalaxyEngine {
     );
     this.postProcessing.setEnabled(config.bloomEnabled);
 
-    // 6. Interaction Plane in Galaxy Equator (XZ Plane at Y=0)
+    // 7. Interaction Plane in Universe Equator (XZ Plane at active galaxy Y)
     this.interactionPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
-    // 7. OrbitControls — 360° Orbit, Zoom, Pan, Damping
+    // 8. OrbitControls — 360° Orbit, Zoom, Pan, Damping
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.target.copy(this.defaultLookTarget);
+    this.controls.target.copy(this.defaultLookOffset);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.06;
 
-    // Continuous zoom range
     this.controls.enableZoom = true;
     this.controls.zoomSpeed = 0.8;
     this.controls.minDistance = 3.5;
-    this.controls.maxDistance = 180.0;
+    this.controls.maxDistance = 500.0;
 
-    // Full 360° rotation (allow looking from directly above and below)
     this.controls.minPolarAngle = 0.02;
     this.controls.maxPolarAngle = Math.PI - 0.02;
 
-    // Panning
     this.controls.enablePan = true;
-    this.controls.panSpeed = 0.6;
+    this.controls.panSpeed = 0.7;
 
     this.controls.mouseButtons = {
       LEFT: THREE.MOUSE.ROTATE,
@@ -188,10 +198,10 @@ export class GalaxyEngine {
     this.renderer.domElement.style.touchAction = 'none';
     this.controls.update();
 
-    // 8. Event Listeners
+    // 9. Event Listeners
     this.initEventListeners();
 
-    // 9. Start Loop
+    // 10. Start Loop
     this.animate = this.animate.bind(this);
     this.animate();
   }
@@ -205,12 +215,61 @@ export class GalaxyEngine {
     }
   }
 
+  private emitUniverseState() {
+    if (this.universeStateCallback) {
+      const active = this.getActiveGalaxy();
+      const dist = active ? Math.round(active.worldPosition.distanceTo(this.camera.position)) : 0;
+      this.universeStateCallback({
+        activeGalaxyId: this.activeGalaxyId,
+        isNavigating: this.isTransitioningCamera,
+        distanceToActive: dist,
+      });
+    }
+  }
+
+  public getActiveGalaxy(): GalaxyInstance | undefined {
+    return this.galaxies.get(this.activeGalaxyId);
+  }
+
   public getState(): InteractionState {
     return this.currentState;
   }
 
   public isCoreInspecting(): boolean {
     return this.isInspectingCore;
+  }
+
+  public getActiveGalaxyId(): string {
+    return this.activeGalaxyId;
+  }
+
+  /**
+   * Seamless Inter-Galactic Navigation
+   * Flies smoothly through deep space from current position to the target galaxy
+   */
+  public navigateToGalaxy(galaxyId: string) {
+    const targetGalaxy = this.galaxies.get(galaxyId);
+    if (!targetGalaxy || (this.activeGalaxyId === galaxyId && !this.isInspectingCore && !this.isTransitioningCamera)) {
+      return;
+    }
+
+    this.activeGalaxyId = galaxyId;
+    this.isInspectingCore = false;
+    this.targetCoreInspection = 0.0;
+    this.setState('CORE_TRANSITION');
+
+    // Update interaction plane to active galaxy Y position
+    this.interactionPlane.constant = -targetGalaxy.worldPosition.y;
+
+    const targetCamPos = new THREE.Vector3().copy(targetGalaxy.worldPosition).add(this.defaultCamOffset);
+    const targetLookPos = new THREE.Vector3().copy(targetGalaxy.worldPosition).add(this.defaultLookOffset);
+
+    // Dynamic travel duration based on deep space distance
+    const flightDist = this.camera.position.distanceTo(targetCamPos);
+    const flightDuration = Math.min(Math.max(flightDist * 0.005, 1.2), 2.2);
+
+    this.startCameraTransition(targetCamPos, targetLookPos, flightDuration);
+    this.emitUniverseState();
   }
 
   private initEventListeners() {
@@ -244,15 +303,12 @@ export class GalaxyEngine {
     this.renderer.setPixelRatio(config.dpr);
     this.postProcessing.setSize(width, height);
 
-    this.galaxy.setPixelRatio(config.dpr);
+    this.galaxies.forEach((g) => g.setPixelRatio(config.dpr));
     this.nebula.setPixelRatio(config.dpr);
     this.starfield.setPixelRatio(config.dpr);
     this.foregroundDust.setPixelRatio(config.dpr);
   }
 
-  /**
-   * Captures mouse position for the gravitational lens well
-   */
   private onPointerMove(e: MouseEvent) {
     const x = (e.clientX / window.innerWidth) * 2 - 1;
     const y = -(e.clientY / window.innerHeight) * 2 + 1;
@@ -276,14 +332,12 @@ export class GalaxyEngine {
     const deltaY = Math.abs(e.clientY - this.pointerDownPos.y);
     const elapsed = performance.now() - this.pointerDownTime;
 
-    // Check if this was a clean click / tap (not a camera orbit drag)
-    if (deltaX < 5 && deltaY < 5 && elapsed < 320) {
+    if (deltaX < 6 && deltaY < 6 && elapsed < 320) {
       this.handleCanvasClick(e.clientX, e.clientY);
 
-      // Handle mobile double tap
       const now = performance.now();
       if (now - this.lastTapTime < 320) {
-        this.handleCoreToggleAtScreen(e.clientX, e.clientY);
+        this.handleDoubleActionAtScreen(e.clientX, e.clientY);
         this.lastTapTime = 0;
       } else {
         this.lastTapTime = now;
@@ -292,34 +346,48 @@ export class GalaxyEngine {
   }
 
   private onDoubleClick(e: MouseEvent) {
-    this.handleCoreToggleAtScreen(e.clientX, e.clientY);
+    this.handleDoubleActionAtScreen(e.clientX, e.clientY);
   }
 
   /**
-   * Phase 4: Click Disturbance & Energy Wave Pulse
+   * Phase 4: Click Disturbance, Energy Wave Pulse, or Distant Galaxy Selection
    */
   private handleCanvasClick(clientX: number, clientY: number) {
     const normX = (clientX / window.innerWidth) * 2 - 1;
     const normY = -(clientY / window.innerHeight) * 2 + 1;
 
     this.raycaster.setFromCamera(new THREE.Vector2(normX, normY), this.camera);
-    const hitPoint = new THREE.Vector3();
+    const ray = this.raycaster.ray;
 
-    if (this.raycaster.ray.intersectPlane(this.interactionPlane, hitPoint)) {
-      const distFromCenter = hitPoint.length();
+    // Check if user clicked on any other distant galaxy in the universe
+    for (const [id, galaxy] of this.galaxies.entries()) {
+      if (id !== this.activeGalaxyId) {
+        const distRayToGalaxy = ray.distanceToPoint(galaxy.worldPosition);
+        if (distRayToGalaxy < galaxy.boundingRadius * 0.9) {
+          // Clicked on distant galaxy: initiate flight towards it!
+          this.navigateToGalaxy(id);
+          return;
+        }
+      }
+    }
+
+    // Otherwise, generate localized energy wave on the active galaxy plane
+    const hitPoint = new THREE.Vector3();
+    const activeGalaxy = this.getActiveGalaxy();
+
+    if (activeGalaxy && ray.intersectPlane(this.interactionPlane, hitPoint)) {
+      const distFromGalaxyCenter = hitPoint.distanceTo(activeGalaxy.worldPosition);
 
       this.pulseOrigin.copy(hitPoint);
       this.pulseProgress = 0.0;
       this.pulseElapsed = 0.0;
       this.pulseActive = true;
 
-      if (distFromCenter <= 38.0) {
-        // Direct click on galaxy: Powerful radiant energy pulse
-        this.pulseStrength = 1.0 + (1.0 - Math.min(distFromCenter / 38.0, 1.0)) * 0.4;
+      if (distFromGalaxyCenter <= activeGalaxy.boundingRadius) {
+        this.pulseStrength = 1.0 + (1.0 - Math.min(distFromGalaxyCenter / activeGalaxy.boundingRadius, 1.0)) * 0.4;
         this.pulseDuration = 1.6;
         this.setState('PULSE');
       } else {
-        // Click on empty space: Localized gravitational disturbance
         this.pulseStrength = 0.45;
         this.pulseDuration = 1.2;
       }
@@ -327,11 +395,10 @@ export class GalaxyEngine {
   }
 
   /**
-   * Phase 5: Core Detection & Inspection Mode Toggle
+   * Phase 5: Double-Click Core Inspection or Galaxy Selection
    */
-  private handleCoreToggleAtScreen(clientX: number, clientY: number) {
+  private handleDoubleActionAtScreen(clientX: number, clientY: number) {
     if (this.isInspectingCore) {
-      // Exit Core Inspection Mode -> Return smoothly to orbital exploration
       this.exitCoreInspection();
       return;
     }
@@ -340,47 +407,64 @@ export class GalaxyEngine {
     const normY = -(clientY / window.innerHeight) * 2 + 1;
 
     this.raycaster.setFromCamera(new THREE.Vector2(normX, normY), this.camera);
-    
-    // Spatial Ray-to-Point distance test against core nucleus (0, 0, 0)
     const ray = this.raycaster.ray;
-    const distToCoreCenter = ray.distanceToPoint(new THREE.Vector3(0, 0, 0));
 
-    // Also check intersection on plane
+    // Check if double-clicked another galaxy
+    for (const [id, galaxy] of this.galaxies.entries()) {
+      if (id !== this.activeGalaxyId) {
+        const distRayToGalaxy = ray.distanceToPoint(galaxy.worldPosition);
+        if (distRayToGalaxy < galaxy.boundingRadius) {
+          this.navigateToGalaxy(id);
+          return;
+        }
+      }
+    }
+
+    // Check if double-clicked active galaxy core
+    const activeGalaxy = this.getActiveGalaxy();
+    if (!activeGalaxy) return;
+
+    const distToActiveCore = ray.distanceToPoint(activeGalaxy.worldPosition);
     const planeHit = new THREE.Vector3();
     let hitCore = false;
 
     if (ray.intersectPlane(this.interactionPlane, planeHit)) {
-      if (planeHit.length() < 7.5) {
+      if (planeHit.distanceTo(activeGalaxy.worldPosition) < 7.5) {
         hitCore = true;
       }
     }
 
-    if (distToCoreCenter < 6.5 || hitCore) {
-      // Double click directly on or near the core: enter inspection mode
+    if (distToActiveCore < 6.5 || hitCore) {
       this.enterCoreInspection();
     }
   }
 
-  /**
-   * Enters Core Inspection Mode with smooth cinematic transition
-   */
   public enterCoreInspection() {
+    const active = this.getActiveGalaxy();
+    if (!active) return;
+
     this.isInspectingCore = true;
     this.targetCoreInspection = 1.0;
     this.setState('CORE_TRANSITION');
 
-    this.startCameraTransition(this.coreInspectionPos, this.coreLookTarget, 1.2);
+    const targetPos = new THREE.Vector3().copy(active.worldPosition).add(this.coreInspectOffset);
+    const targetLook = new THREE.Vector3().copy(active.worldPosition);
+
+    this.startCameraTransition(targetPos, targetLook, 1.2);
   }
 
-  /**
-   * Exits Core Inspection Mode smoothly returning to exploration view
-   */
   public exitCoreInspection() {
+    const active = this.getActiveGalaxy();
+    if (!active) return;
+
     this.isInspectingCore = false;
     this.targetCoreInspection = 0.0;
     this.setState('CORE_TRANSITION');
 
-    this.startCameraTransition(this.defaultCameraPos, this.defaultLookTarget, 1.2);
+    const targetPos = new THREE.Vector3().copy(active.worldPosition).add(this.defaultCamOffset);
+    const targetLook = new THREE.Vector3().copy(active.worldPosition).add(this.defaultLookOffset);
+
+    this.startCameraTransition(targetPos, targetLook, 1.2);
   }
 
   public toggleCoreInspection() {
@@ -391,9 +475,6 @@ export class GalaxyEngine {
     }
   }
 
-  /**
-   * Smoothly interpolates the camera to a target position and lookAt target
-   */
   private startCameraTransition(targetPos: THREE.Vector3, targetLook: THREE.Vector3, duration = 1.0) {
     this.isTransitioningCamera = true;
     this.camTransitionStartPos.copy(this.camera.position);
@@ -405,28 +486,36 @@ export class GalaxyEngine {
   }
 
   public resetCamera() {
+    const active = this.getActiveGalaxy();
+    if (!active) return;
+
     if (this.isInspectingCore) {
       this.isInspectingCore = false;
       this.targetCoreInspection = 0.0;
     }
     this.setState('RETURNING');
-    this.startCameraTransition(this.defaultCameraPos, this.defaultLookTarget, 0.9);
+    const targetPos = new THREE.Vector3().copy(active.worldPosition).add(this.defaultCamOffset);
+    const targetLook = new THREE.Vector3().copy(active.worldPosition).add(this.defaultLookOffset);
+    this.startCameraTransition(targetPos, targetLook, 0.9);
   }
 
   private onKeyDown(e: KeyboardEvent) {
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+
     if (e.key === 'r' || e.key === 'R') {
-      const active = document.activeElement;
-      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
       this.resetCamera();
     } else if (e.key === 'c' || e.key === 'C') {
-      const active = document.activeElement;
-      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
       this.toggleCoreInspection();
+    } else if (e.key === '1') {
+      this.navigateToGalaxy('galaxy01');
+    } else if (e.key === '2') {
+      this.navigateToGalaxy('galaxy02');
     }
   }
 
   public setPreset(preset: GalaxyPreset) {
-    this.galaxy.applyPreset(preset);
+    this.galaxies.forEach((g) => g.applyPreset(preset));
   }
 
   public setQualityTier(tier: QualityTier) {
@@ -435,12 +524,15 @@ export class GalaxyEngine {
     this.particleCount = config.particleCount;
 
     this.renderer.setPixelRatio(config.dpr);
-    this.galaxy.setPixelRatio(config.dpr);
+    this.galaxies.forEach((g) => {
+      g.setPixelRatio(config.dpr);
+      g.rebuild(config.particleCount);
+    });
+
     this.nebula.setPixelRatio(config.dpr);
     this.starfield.setPixelRatio(config.dpr);
     this.foregroundDust.setPixelRatio(config.dpr);
 
-    this.galaxy.rebuild(config.particleCount);
     this.nebula.rebuild(config.nebulaCount);
     this.starfield.rebuild(config.starCount);
     this.foregroundDust.rebuild(config.foregroundDustCount);
@@ -450,7 +542,7 @@ export class GalaxyEngine {
   }
 
   public getParticleCount(): number {
-    return this.particleCount;
+    return this.particleCount * this.galaxies.size;
   }
 
   public triggerEntrance() {
@@ -465,7 +557,7 @@ export class GalaxyEngine {
     const delta = Math.min(this.clock.getDelta(), 0.1);
     const elapsedTime = this.clock.getElapsedTime();
 
-    // 1. Cinematic Entrance Progression
+    // 1. Entrance Progression
     if (!this.isEntranceComplete) {
       this.entranceProgress += delta * 0.45;
       if (this.entranceProgress >= 1.0) {
@@ -475,24 +567,22 @@ export class GalaxyEngine {
       }
     }
 
-    // 2. Phase 3: Interactive Gravitational Lens Interpolation & Temporal Recovery
+    // 2. Gravitational Lens Interpolation & Temporal Recovery
     this.mouse2D.lerp(this.targetMouse2D, 0.08);
 
-    // Fade out mouse influence if stationary for > 800ms (temporal recovery)
     if (performance.now() - this.lastMouseMoveTime > 800) {
       this.targetMouseInfluence = 0.08;
     }
     this.mouseInfluence += (this.targetMouseInfluence - this.mouseInfluence) * 0.05;
 
-    // Project 2D Mouse to 3D Gravitational Well Plane
     this.raycaster.setFromCamera(this.mouse2D, this.camera);
     const intersectionPoint = new THREE.Vector3();
     if (this.raycaster.ray.intersectPlane(this.interactionPlane, intersectionPoint)) {
-      this.targetMouse3D.copy(intersectionPoint);
+      this.targetWorldMouse3D.copy(intersectionPoint);
     }
-    this.mouse3D.lerp(this.targetMouse3D, 0.09);
+    this.worldMouse3D.lerp(this.targetWorldMouse3D, 0.09);
 
-    // 3. Phase 4: Energy Wave Pulse Progress Animation
+    // 3. Pulse Wavefront Animation
     if (this.pulseActive) {
       this.pulseElapsed += delta;
       this.pulseProgress = Math.min(this.pulseElapsed / this.pulseDuration, 1.0);
@@ -506,15 +596,15 @@ export class GalaxyEngine {
       }
     }
 
-    // 4. Phase 5: Smooth Core Inspection LOD Factor Interpolation
+    // 4. Core Inspection LOD Factor Interpolation
     this.coreInspectionFactor += (this.targetCoreInspection - this.coreInspectionFactor) * (delta * 3.5);
 
-    // 5. Cinematic Camera Transitions (Easing into core / resetting view)
+    // 5. Cinematic Camera Transitions (Navigation between galaxies & Core Inspection)
     if (this.isTransitioningCamera) {
       this.camTransitionProgress += delta / this.camTransitionDuration;
       const t = Math.min(this.camTransitionProgress, 1.0);
       
-      // Smooth cubic ease-out
+      // Smooth cubic ease-out curve
       const ease = 1.0 - Math.pow(1.0 - t, 3.0);
 
       this.camera.position.lerpVectors(this.camTransitionStartPos, this.camTransitionTargetPos, ease);
@@ -523,36 +613,46 @@ export class GalaxyEngine {
       if (t >= 1.0) {
         this.isTransitioningCamera = false;
         this.setState(this.isInspectingCore ? 'CORE_INSPECTION' : 'EXPLORING');
+        this.emitUniverseState();
       }
     }
 
-    // 6. Update OrbitControls (handles damping, user rotation, pan, zoom)
+    // 6. Update OrbitControls
     this.controls.update();
 
-    // 7. Update Particle Subsystems with all interaction telemetry
+    // 7. Update Scale-Aware LOD and Simulation for all Galaxies
     const effectiveTime = this.prefersReducedMotion ? elapsedTime * 0.2 : elapsedTime;
-    this.galaxy.update(
-      effectiveTime,
-      this.mouse3D,
-      this.entranceProgress,
-      this.mouseInfluence,
-      this.pulseOrigin,
-      this.pulseProgress,
-      this.pulseStrength,
-      this.coreInspectionFactor
-    );
+
+    this.galaxies.forEach((galaxyInstance, id) => {
+      // Update distance LOD relative to current camera position
+      galaxyInstance.updateLOD(this.camera.position);
+
+      const isActive = id === this.activeGalaxyId;
+      galaxyInstance.update(
+        effectiveTime,
+        this.worldMouse3D,
+        this.entranceProgress,
+        isActive ? this.mouseInfluence : 0.0,
+        this.pulseOrigin,
+        this.pulseProgress,
+        isActive ? this.pulseStrength : 0.0,
+        isActive ? this.coreInspectionFactor : 0.0
+      );
+    });
+
+    // 8. Update Environment Subsystems
     this.nebula.update(effectiveTime, this.entranceProgress);
     this.starfield.update(effectiveTime, this.entranceProgress);
     this.foregroundDust.update(effectiveTime, this.entranceProgress);
 
-    // 8. Render Post-Processing Pipeline
+    // 9. Render Post-Processing Pipeline
     if (this.postProcessing.isEnabled()) {
       this.postProcessing.render();
     } else {
       this.renderer.render(this.scene, this.camera);
     }
 
-    // 9. FPS Telemetry Calculation
+    // 10. FPS Telemetry Calculation
     this.frameCount++;
     const now = performance.now();
     if (now - this.lastFpsUpdate >= 500) {
@@ -561,10 +661,14 @@ export class GalaxyEngine {
       this.lastFpsUpdate = now;
 
       if (this.statsCallback) {
-        const camDist = Math.round(this.camera.position.distanceTo(this.controls.target));
+        const activeGalaxy = this.getActiveGalaxy();
+        const camDist = activeGalaxy
+          ? Math.round(this.camera.position.distanceTo(activeGalaxy.worldPosition))
+          : Math.round(this.camera.position.length());
+
         this.statsCallback({
           fps: this.currentFps,
-          particleCount: this.particleCount,
+          particleCount: this.getParticleCount(),
           drawCalls: this.renderer.info.render.calls,
           tier: this.qualityTier,
           mouseNormalized: { x: this.mouse2D.x, y: this.mouse2D.y },
@@ -589,7 +693,8 @@ export class GalaxyEngine {
     canvas.removeEventListener('dblclick', this.onDoubleClick);
 
     this.controls.dispose();
-    this.galaxy.dispose();
+    this.galaxies.forEach((g) => g.dispose());
+    this.galaxies.clear();
     this.nebula.dispose();
     this.starfield.dispose();
     this.foregroundDust.dispose();

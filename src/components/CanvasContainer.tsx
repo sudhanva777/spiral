@@ -4,6 +4,7 @@ import { MinimalHUD, GALAXY_PRESETS } from './MinimalHUD';
 import { WebGLFallback } from './WebGLFallback';
 import { isWebGLAvailable, detectQualityTier } from '../webgl/utils/deviceDetection';
 import type { GalaxyPreset, InteractionState, QualityTier, SimulationStats } from '../types/simulation';
+import type { UniverseState } from '../types/universe';
 
 export const CanvasContainer: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -14,13 +15,18 @@ export const CanvasContainer: React.FC = () => {
   const [stats, setStats] = useState<SimulationStats>({
     fps: 60,
     particleCount: 250000,
-    drawCalls: 3,
+    drawCalls: 4,
     tier: 'ultra',
     mouseNormalized: { x: 0, y: 0 },
     cameraDistance: 44,
   });
 
   const [interactionState, setInteractionState] = useState<InteractionState>('CINEMATIC');
+  const [universeState, setUniverseState] = useState<UniverseState>({
+    activeGalaxyId: 'galaxy01',
+    isNavigating: false,
+    distanceToActive: 44,
+  });
 
   const handleStatsUpdate = useCallback((newStats: SimulationStats) => {
     setStats(newStats);
@@ -28,6 +34,10 @@ export const CanvasContainer: React.FC = () => {
 
   const handleStateChange = useCallback((newState: InteractionState) => {
     setInteractionState(newState);
+  }, []);
+
+  const handleUniverseStateChange = useCallback((newUniverseState: UniverseState) => {
+    setUniverseState(newUniverseState);
   }, []);
 
   useEffect(() => {
@@ -43,7 +53,8 @@ export const CanvasContainer: React.FC = () => {
       containerRef.current,
       initialTier,
       handleStatsUpdate,
-      handleStateChange
+      handleStateChange,
+      handleUniverseStateChange
     );
     engineRef.current = engine;
 
@@ -51,7 +62,7 @@ export const CanvasContainer: React.FC = () => {
       engine.dispose();
       engineRef.current = null;
     };
-  }, [handleStatsUpdate, handleStateChange]);
+  }, [handleStatsUpdate, handleStateChange, handleUniverseStateChange]);
 
   const handleSelectPreset = (preset: GalaxyPreset) => {
     setCurrentPreset(preset);
@@ -78,6 +89,12 @@ export const CanvasContainer: React.FC = () => {
     }
   };
 
+  const handleSelectGalaxy = (galaxyId: string) => {
+    if (engineRef.current) {
+      engineRef.current.navigateToGalaxy(galaxyId);
+    }
+  };
+
   if (!hasWebGL) {
     return <WebGLFallback />;
   }
@@ -92,10 +109,12 @@ export const CanvasContainer: React.FC = () => {
         stats={stats}
         currentPreset={currentPreset}
         interactionState={interactionState}
+        universeState={universeState}
         onSelectPreset={handleSelectPreset}
         onSelectQuality={handleSelectQuality}
         onResetCamera={handleResetCamera}
         onToggleCoreInspection={handleToggleCoreInspection}
+        onSelectGalaxy={handleSelectGalaxy}
       />
     </div>
   );

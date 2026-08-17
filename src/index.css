@@ -209,6 +209,71 @@ html, body, #root {
   gap: 0.6rem;
 }
 
+/* Universe Selector Bar */
+.universe-selector-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(14px);
+  padding: 0.25rem 0.4rem;
+  border-radius: 9999px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.galaxy-nav-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  transition: all 0.25s ease;
+}
+
+.galaxy-nav-pill:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.galaxy-nav-pill.active {
+  background: linear-gradient(135deg, rgba(139, 85, 255, 0.3) 0%, rgba(215, 92, 255, 0.2) 100%);
+  border-color: rgba(215, 92, 255, 0.45);
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(215, 92, 255, 0.25);
+}
+
+.galaxy-nav-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.galaxy-nav-pill.active .galaxy-nav-num {
+  color: var(--color-warm-peach);
+}
+
+.galaxy-nav-name {
+  white-space: nowrap;
+}
+
+/* Telemetry Center */
+.hud-telemetry {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
 .telemetry-chip {
   display: flex;
   align-items: center;
@@ -227,6 +292,12 @@ html, body, #root {
   border-color: rgba(255, 143, 200, 0.5);
   background: rgba(40, 15, 35, 0.65);
   box-shadow: 0 0 15px rgba(255, 143, 200, 0.3);
+}
+
+.active-warp-chip {
+  border-color: rgba(57, 107, 255, 0.5);
+  background: rgba(10, 20, 45, 0.65);
+  box-shadow: 0 0 15px rgba(57, 107, 255, 0.3);
 }
 
 .chip-icon {

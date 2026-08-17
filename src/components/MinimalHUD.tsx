@@ -12,9 +12,12 @@ import {
   ChevronUp,
   ChevronDown,
   RotateCcw,
-  Crosshair
+  Crosshair,
+  Globe2
 } from 'lucide-react';
 import type { GalaxyPreset, InteractionState, QualityTier, SimulationStats } from '../types/simulation';
+import type { UniverseState } from '../types/universe';
+import { UNIVERSE_GALAXIES } from '../webgl/galaxies/registry';
 import { soundSynthesizer } from './SoundSynthesizer';
 
 export const GALAXY_PRESETS: GalaxyPreset[] = [
@@ -94,20 +97,24 @@ interface MinimalHUDProps {
   stats: SimulationStats;
   currentPreset: GalaxyPreset;
   interactionState?: InteractionState;
+  universeState?: UniverseState;
   onSelectPreset: (preset: GalaxyPreset) => void;
   onSelectQuality: (tier: QualityTier) => void;
   onResetCamera?: () => void;
   onToggleCoreInspection?: () => void;
+  onSelectGalaxy?: (galaxyId: string) => void;
 }
 
 export const MinimalHUD: React.FC<MinimalHUDProps> = ({
   stats,
   currentPreset,
   interactionState = 'EXPLORING',
+  universeState = { activeGalaxyId: 'galaxy01', isNavigating: false, distanceToActive: 44 },
   onSelectPreset,
   onSelectQuality,
   onResetCamera,
   onToggleCoreInspection,
+  onSelectGalaxy,
 }) => {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -115,6 +122,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
   const [showInfo, setShowInfo] = useState(false);
 
   const isCoreInspecting = interactionState === 'CORE_INSPECTION' || interactionState === 'CORE_TRANSITION';
+  const activeGalaxy = UNIVERSE_GALAXIES.find((g) => g.id === universeState.activeGalaxyId) || UNIVERSE_GALAXIES[0];
 
   const handleToggleAudio = () => {
     const playing = soundSynthesizer.toggle();
@@ -141,9 +149,28 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
             <span className="brand-ring" />
           </div>
           <div className="brand-text">
-            <h1 className="brand-title">A E T H E R // V O R T E X</h1>
-            <span className="brand-sub">3D GALAXY SIMULATION ENGINE • THREE.JS / GLSL</span>
+            <h1 className="brand-title">A E T H E R // U N I V E R S E</h1>
+            <span className="brand-sub">{activeGalaxy.name.toUpperCase()} • CONTINUOUS 3D MULTI-GALAXY ENGINE</span>
           </div>
+        </div>
+
+        {/* Universe Celestial Navigator / Breadcrumbs */}
+        <div className="universe-selector-bar pointer-events-auto">
+          {UNIVERSE_GALAXIES.map((galaxy, idx) => {
+            const isActive = galaxy.id === universeState.activeGalaxyId;
+            return (
+              <button
+                key={galaxy.id}
+                onClick={() => onSelectGalaxy && onSelectGalaxy(galaxy.id)}
+                className={`galaxy-nav-pill ${isActive ? 'active' : ''}`}
+                title={`Travel to ${galaxy.name} (${idx + 1})`}
+              >
+                <Globe2 className={`w-3.5 h-3.5 mr-1.5 ${isActive ? 'text-pink-400' : 'text-slate-400'}`} />
+                <span className="galaxy-nav-num">0{idx + 1}</span>
+                <span className="galaxy-nav-name">{galaxy.name}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Telemetry Chips */}
@@ -156,13 +183,13 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
 
           <div className="telemetry-chip">
             <Sparkles className="chip-icon text-pink-400" />
-            <span className="chip-label">GPU PARTICLES</span>
+            <span className="chip-label">UNIVERSE PARTICLES</span>
             <span className="chip-val">{(stats.particleCount / 1000).toFixed(0)}K</span>
           </div>
 
           <div className="telemetry-chip hidden-mobile">
             <Compass className="chip-icon text-blue-400" />
-            <span className="chip-label">DIST</span>
+            <span className="chip-label">RANGE</span>
             <span className="chip-val">{stats.cameraDistance} AU</span>
           </div>
 
@@ -170,6 +197,12 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
             <div className="telemetry-chip active-core-chip">
               <Crosshair className="chip-icon text-pink-300 animate-pulse" />
               <span className="chip-label text-pink-300">CORE INSPECTION</span>
+            </div>
+          )}
+
+          {universeState.isNavigating && (
+            <div className="telemetry-chip active-warp-chip">
+              <span className="chip-label text-blue-300 animate-pulse">WARPING THROUGH SPACE</span>
             </div>
           )}
         </div>
@@ -201,7 +234,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           <button
             onClick={() => setShowInfo(!showInfo)}
             className={`hud-btn ${showInfo ? 'active' : ''}`}
-            title="Simulation Architecture & Controls"
+            title="Universe Architecture & Exploration Guide"
             aria-label="Simulation Architecture"
           >
             <Info className="w-4 h-4" />
@@ -231,32 +264,33 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
       {showInfo && (
         <div className="hud-info-modal pointer-events-auto">
           <div className="modal-header">
-            <h3>Cosmic Simulation Architecture & 3D Controls</h3>
+            <h3>AETHER Universe Architecture</h3>
             <button onClick={() => setShowInfo(false)} className="close-btn">×</button>
           </div>
           <div className="modal-body">
             <p>
-              <strong>3D Orbital Exploration:</strong> Full 360° horizontal and vertical orbit with continuous smooth zoom and volumetric depth perception.
+              <strong>Continuous 3D Universe:</strong> Multiple unique procedural galaxies co-existing in the same seamless Three.js coordinate space with real-time scale-aware distance LOD.
             </p>
             <p>
-              <strong>GPU Particle Pipeline:</strong> Over 250,000+ procedural particles rendered across 4 multi-scale layers with atmospheric perspective and foreground dust parallax.
+              <strong>Galaxy 01 (Aether Prime):</strong> Barred spiral morphology with electric cyan/ice-blue relativistic streams, warm amber arms, and emerald outer dust.
             </p>
             <p>
-              <strong>Relativistic Gravitational Field:</strong> Cursor movement creates dynamic spacetime warping, localized attraction, and frame-dragging swirl with natural temporal recovery.
+              <strong>Galaxy 02 (Ignis Vesper):</strong> Asymmetric flocculent ring morphology with warm golden nucleus (#FFF4D6), vivid magenta/violet plasma arms, and deep burgundy cosmic dust (#7F1D1D).
             </p>
             <p>
-              <strong>Propagating Energy Wave:</strong> Clicking the galaxy triggers a radiating spherical wavefront through the particle field with localized vertical and photonic displacement.
+              <strong>Scale-Aware Distance LOD:</strong> Distant celestial objects dynamically optimize particle size and density, locking performance at 60 FPS.
             </p>
             <div className="modal-interaction-guide">
-              <h4>Navigation Controls</h4>
+              <h4>Universe Navigation & Controls</h4>
               <ul>
-                <li><span>Left-Click Drag</span> Orbit 360° around galaxy</li>
-                <li><span>Right-Click Drag</span> Pan camera viewpoint (or 2-finger drag on mobile)</li>
-                <li><span>Scroll Wheel</span> Smooth continuous zoom in / out (pinch on mobile)</li>
-                <li><span>Cursor Move</span> Spacetime gravitational lensing</li>
-                <li><span>Click Galaxy</span> Radiating energy wave pulse</li>
+                <li><span>Pill [01] / [02]</span> Travel to Galaxy 01 / Galaxy 02</li>
+                <li><span>Keys 1 / 2</span> Quick shortcut to fly to Galaxy 01 / 02</li>
+                <li><span>Left-Click Drag</span> 360° Orbit around active galaxy</li>
+                <li><span>Right-Click Drag</span> Pan camera across deep space</li>
+                <li><span>Scroll / Pinch</span> Continuous zoom (3.5 to 500 AU)</li>
+                <li><span>Click Galaxy</span> Propagating energy wave pulse</li>
                 <li><span>Double-Click Core</span> Toggle close Core Inspection mode (or C key)</li>
-                <li><span>R Key / Reset</span> Smooth cinematic return to default view</li>
+                <li><span>R Key / Reset</span> Return to active galaxy default view</li>
               </ul>
             </div>
           </div>
@@ -268,7 +302,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
         {/* Interaction Hint Badge */}
         <div className="interaction-hint pointer-events-auto">
           <div className="pulse-dot" />
-          <span>DRAG — 360° ORBIT • SCROLL — ZOOM • CLICK — ENERGY WAVE • DBL-CLICK CORE — INSPECT • R — RESET</span>
+          <span>DRAG — ORBIT • SCROLL — ZOOM • CLICK [01 / 02] — TRAVEL DEEP SPACE • DBL-CLICK CORE — INSPECT • R — RESET</span>
         </div>
 
         {/* Floating Preset Selector Drawer */}

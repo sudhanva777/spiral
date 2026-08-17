@@ -3,19 +3,24 @@ import { generateGalaxyParticles, type ParticleAttributes } from '../utils/galax
 import { galaxyVertexShader } from '../shaders/galaxy.vert';
 import { galaxyFragmentShader } from '../shaders/galaxy.frag';
 import type { GalaxyPreset } from '../../types/simulation';
+import type { GalaxyConfig } from '../../types/universe';
+import { GALAXY_01_CONFIG } from '../galaxies/registry';
 
 export class GalaxyParticles {
   public points: THREE.Points;
   public geometry: THREE.BufferGeometry;
   public material: THREE.ShaderMaterial;
+  public config: GalaxyConfig;
 
-  constructor(particleCount: number, spiralTightness = 3.2) {
+  constructor(particleCount: number, config: GalaxyConfig = GALAXY_01_CONFIG) {
+    this.config = config;
     this.geometry = new THREE.BufferGeometry();
 
-    const data: ParticleAttributes = generateGalaxyParticles(particleCount, spiralTightness);
+    const data: ParticleAttributes = generateGalaxyParticles(particleCount, config);
 
     this.geometry.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
     this.geometry.setAttribute('aInitialPos', new THREE.BufferAttribute(data.positions, 3));
+    this.geometry.setAttribute('aColor', new THREE.BufferAttribute(data.colors, 3));
     this.geometry.setAttribute('aSize', new THREE.BufferAttribute(data.sizes, 1));
     this.geometry.setAttribute('aScale', new THREE.BufferAttribute(data.scales, 1));
     this.geometry.setAttribute('aRandomness', new THREE.BufferAttribute(data.randomness, 1));
@@ -33,18 +38,19 @@ export class GalaxyParticles {
       blending: THREE.AdditiveBlending,
       uniforms: {
         uTime: { value: 0 },
-        uSpeed: { value: 0.28 },
+        uSpeed: { value: config.speed },
         uSizeMultiplier: { value: 1.15 },
         uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) },
-        uTurbulence: { value: 0.8 },
-        uSpiralTightness: { value: spiralTightness },
+        uTurbulence: { value: config.turbulence },
+        uSpiralTightness: { value: config.morphology.spiralTightness },
         uEntranceProgress: { value: 0.0 },
         uMousePos3D: { value: new THREE.Vector3(0, 0, 0) },
-        uMouseInfluence: { value: 0.5 },
+        uMouseInfluence: { value: 0.0 },
         uTilt: { value: 0.0 },
         uCoreGlowSize: { value: 1.0 },
         uIntensity: { value: 1.0 },
-        uCoreFalloff: { value: 6.5 },
+        uCoreFalloff: { value: config.morphology.type === 'flocculent-ring' ? 5.2 : 6.5 },
+        uLODFactor: { value: 1.0 },
         // Phase 4: Energy Wave Pulse Uniforms
         uPulseOrigin: { value: new THREE.Vector3(0, 0, 0) },
         uPulseProgress: { value: 0.0 },
@@ -81,6 +87,10 @@ export class GalaxyParticles {
     this.material.uniforms.uCoreInspection.value = coreInspection;
   }
 
+  public setLODFactor(lod: number) {
+    this.material.uniforms.uLODFactor.value = lod;
+  }
+
   public applyPreset(preset: GalaxyPreset) {
     this.material.uniforms.uSpeed.value = preset.speed;
     this.material.uniforms.uTurbulence.value = preset.turbulence;
@@ -92,14 +102,16 @@ export class GalaxyParticles {
     this.material.uniforms.uPixelRatio.value = dpr;
   }
 
-  public rebuild(count: number, spiralTightness = 3.2) {
+  public rebuild(count: number, config: GalaxyConfig = this.config) {
+    this.config = config;
     this.geometry.dispose();
 
     this.geometry = new THREE.BufferGeometry();
-    const data = generateGalaxyParticles(count, spiralTightness);
+    const data = generateGalaxyParticles(count, config);
 
     this.geometry.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
     this.geometry.setAttribute('aInitialPos', new THREE.BufferAttribute(data.positions, 3));
+    this.geometry.setAttribute('aColor', new THREE.BufferAttribute(data.colors, 3));
     this.geometry.setAttribute('aSize', new THREE.BufferAttribute(data.sizes, 1));
     this.geometry.setAttribute('aScale', new THREE.BufferAttribute(data.scales, 1));
     this.geometry.setAttribute('aRandomness', new THREE.BufferAttribute(data.randomness, 1));
@@ -108,6 +120,11 @@ export class GalaxyParticles {
     this.geometry.setAttribute('aDistance', new THREE.BufferAttribute(data.distances, 1));
     this.geometry.setAttribute('aLayer', new THREE.BufferAttribute(data.layers, 1));
     this.geometry.setAttribute('aCoreType', new THREE.BufferAttribute(data.coreTypes, 1));
+
+    this.material.uniforms.uSpeed.value = config.speed;
+    this.material.uniforms.uTurbulence.value = config.turbulence;
+    this.material.uniforms.uSpiralTightness.value = config.morphology.spiralTightness;
+    this.material.uniforms.uCoreFalloff.value = config.morphology.type === 'flocculent-ring' ? 5.2 : 6.5;
 
     this.points.geometry = this.geometry;
   }
