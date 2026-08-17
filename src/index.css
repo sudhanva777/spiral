@@ -744,7 +744,7 @@ html, body, #root {
   }
 }
 
-/* Cosmic Breadcrumb Navigation */
+/* Deep Space Breadcrumb Navigation */
 .universe-breadcrumb-bar {
   display: flex;
   align-items: center;
@@ -777,10 +777,6 @@ html, body, #root {
   background: rgba(255, 255, 255, 0.06);
 }
 
-.breadcrumb-node.active-group {
-  color: #a78bfa;
-}
-
 .breadcrumb-separator {
   color: #475569;
   font-size: 0.65rem;
@@ -798,7 +794,7 @@ html, body, #root {
   text-shadow: 0 0 8px rgba(251, 113, 133, 0.5);
 }
 
-/* Cosmic Group Navigator & Galaxy Pills */
+/* Deep Space Galaxy Navigator */
 .cosmic-navigator-bar {
   display: flex;
   flex-direction: column;
@@ -806,41 +802,6 @@ html, body, #root {
   margin-top: 0.75rem;
   width: 100%;
   max-width: 100%;
-}
-
-.group-filter-tabs {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  overflow-x: auto;
-  padding-bottom: 0.2rem;
-}
-
-.group-tab {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  color: #64748b;
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  padding: 0.3rem 0.65rem;
-  border-radius: 6px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s ease;
-}
-
-.group-tab:hover {
-  color: #e2e8f0;
-  border-color: rgba(255, 255, 255, 0.15);
-}
-
-.group-tab.active {
-  background: rgba(168, 85, 247, 0.15);
-  border-color: rgba(168, 85, 247, 0.4);
-  color: #d8b4fe;
-  box-shadow: 0 0 12px rgba(168, 85, 247, 0.15);
 }
 
 .galaxy-pills-scroll {

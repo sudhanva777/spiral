@@ -3,10 +3,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { NebulaParticles } from './particles/NebulaParticles';
 import { StarfieldParticles } from './particles/StarfieldParticles';
 import { ForegroundDustParticles } from './particles/ForegroundDustParticles';
-import { CosmicWeb } from './cosmic/CosmicWeb';
-import { GasCloudSystem } from './cosmic/GasCloudSystem';
 import { GalaxyInstance } from './galaxies/GalaxyInstance';
-import { UNIVERSE_GALAXIES, getGroupForGalaxy } from './galaxies/registry';
+import { UNIVERSE_GALAXIES } from './galaxies/registry';
 import { PostProcessingPipeline } from './PostProcessing';
 import { getQualityConfigForTier } from './utils/deviceDetection';
 import type { GalaxyPreset, InteractionState, QualityTier, SimulationStats } from '../types/simulation';
@@ -20,15 +18,11 @@ export class GalaxyEngine {
   private postProcessing: PostProcessingPipeline;
   private controls: OrbitControls;
 
-  // Universe Galaxy Instances (16 Galaxies across 4 Groups)
+  // Universe Galaxy Instances (16 Distinct Galaxies in Deep Space)
   private galaxies: Map<string, GalaxyInstance> = new Map();
   private activeGalaxyId = 'galaxy01';
 
-  // Cosmic Web & Large-Scale Systems
-  private cosmicWeb: CosmicWeb;
-  private gasClouds: GasCloudSystem;
-
-  // Environmental Particle Subsystems
+  // Environmental Particle Subsystems (Deep Universe Starfield, Local Nebula, Foreground Dust)
   private nebula: NebulaParticles;
   private starfield: StarfieldParticles;
   private foregroundDust: ForegroundDustParticles;
@@ -119,7 +113,7 @@ export class GalaxyEngine {
 
     this.prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    // 1. Scene Setup
+    // 1. Scene Setup — Pure Deep Space Black
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x020208);
 
@@ -145,20 +139,14 @@ export class GalaxyEngine {
 
     container.appendChild(this.renderer.domElement);
 
-    // 4. Universe Galaxies Setup (All 16 Galaxies across 4 Cosmic Groups)
+    // 4. Universe Galaxies Setup (16 Distinct Galaxies in Deep Space)
     UNIVERSE_GALAXIES.forEach((galaxyConfig) => {
       const galaxyInstance = new GalaxyInstance(galaxyConfig, config.particleCount);
       this.galaxies.set(galaxyConfig.id, galaxyInstance);
       this.scene.add(galaxyInstance.group);
     });
 
-    // 5. Cosmic Web Filaments & Gas Cloud Systems
-    this.cosmicWeb = new CosmicWeb(qualityTier === 'ultra' ? 22000 : 12000);
-    this.gasClouds = new GasCloudSystem(qualityTier === 'ultra' ? 10000 : 6000);
-    this.scene.add(this.cosmicWeb.points);
-    this.scene.add(this.gasClouds.points);
-
-    // 6. Environmental Subsystems (Deep Universe Starfield, Nebula, Foreground Dust)
+    // 5. Environmental Subsystems (Deep Universe Starfield, Local Nebula, Foreground Dust)
     this.nebula = new NebulaParticles(config.nebulaCount);
     this.starfield = new StarfieldParticles(config.starCount);
     this.foregroundDust = new ForegroundDustParticles(config.foregroundDustCount);
@@ -167,7 +155,7 @@ export class GalaxyEngine {
     this.scene.add(this.nebula.points);
     this.scene.add(this.foregroundDust.points);
 
-    // 7. Post-Processing Pipeline (Bloom, Relativistic Gravitational Lensing, Cosmic Vignette)
+    // 6. Post-Processing Pipeline (Bloom, Relativistic Gravitational Lensing, Cosmic Vignette)
     this.postProcessing = new PostProcessingPipeline(
       this.renderer,
       this.scene,
@@ -179,10 +167,10 @@ export class GalaxyEngine {
     );
     this.postProcessing.setEnabled(config.bloomEnabled);
 
-    // 8. Interaction Plane in Universe Equator
+    // 7. Interaction Plane in Universe Equator
     this.interactionPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
-    // 9. OrbitControls — 360° Orbit, Zoom, Pan, Damping
+    // 8. OrbitControls — 360° Orbit, Zoom, Pan, Damping
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.target.copy(this.defaultLookOffset);
     this.controls.enableDamping = true;
@@ -191,7 +179,7 @@ export class GalaxyEngine {
     this.controls.enableZoom = true;
     this.controls.zoomSpeed = 0.8;
     this.controls.minDistance = 2.8;
-    this.controls.maxDistance = 650.0;
+    this.controls.maxDistance = 600.0;
 
     this.controls.minPolarAngle = 0.02;
     this.controls.maxPolarAngle = Math.PI - 0.02;
@@ -213,10 +201,10 @@ export class GalaxyEngine {
     this.renderer.domElement.style.touchAction = 'none';
     this.controls.update();
 
-    // 10. Event Listeners
+    // 9. Event Listeners
     this.initEventListeners();
 
-    // 11. Start Animation Loop
+    // 10. Start Animation Loop
     this.animate = this.animate.bind(this);
     this.animate();
   }
@@ -234,36 +222,12 @@ export class GalaxyEngine {
     if (this.universeStateCallback) {
       const active = this.getActiveGalaxy();
       const dist = active ? Math.round(active.worldPosition.distanceTo(this.camera.position)) : 0;
-      const group = getGroupForGalaxy(this.activeGalaxyId);
-
-      let scaleTier: UniverseState['scaleTier'] = 'GALACTIC_DISK';
-      let scaleLabel = '95,000 LIGHT-YEARS // GALACTIC DISK';
-
-      if (dist > 250) {
-        scaleTier = 'COSMIC_WEB';
-        scaleLabel = '8.4 MILLION LIGHT-YEARS // COSMIC WEB & FILAMENTS';
-      } else if (dist > 85) {
-        scaleTier = 'GALAXY_GROUP';
-        scaleLabel = `1.2 MILLION LIGHT-YEARS // ${group.name.toUpperCase()}`;
-      } else if (dist > 15) {
-        scaleTier = 'GALACTIC_DISK';
-        scaleLabel = `95,000 LIGHT-YEARS // ${active?.config.name.toUpperCase()}`;
-      } else if (dist > 4.5) {
-        scaleTier = 'STELLAR_CORE';
-        scaleLabel = '14 LIGHT-YEARS // STELLAR CORE REGION';
-      } else {
-        scaleTier = 'SINGULARITY';
-        scaleLabel = '2.6 MILLION KM // EVENT HORIZON & SINGULARITY';
-      }
 
       this.universeStateCallback({
         activeGalaxyId: this.activeGalaxyId,
-        activeGroupId: group.id,
         isNavigating: this.isTransitioningCamera,
         distanceToActive: dist,
         activeBlackHole: !!active?.config.hasBlackHole,
-        scaleTier,
-        scaleLabel,
       });
     }
   }
@@ -285,7 +249,7 @@ export class GalaxyEngine {
   }
 
   /**
-   * Seamless Inter-Galactic Navigation across all 16 galaxies in the cosmic web
+   * Seamless Inter-Galactic Navigation across all 16 galaxies in deep space
    */
   public navigateToGalaxy(galaxyId: string) {
     const targetGalaxy = this.galaxies.get(galaxyId);
@@ -342,8 +306,6 @@ export class GalaxyEngine {
     this.postProcessing.setSize(width, height);
 
     this.galaxies.forEach((g) => g.setPixelRatio(config.dpr));
-    this.cosmicWeb.setPixelRatio(config.dpr);
-    this.gasClouds.setPixelRatio(config.dpr);
     this.nebula.setPixelRatio(config.dpr);
     this.starfield.setPixelRatio(config.dpr);
     this.foregroundDust.setPixelRatio(config.dpr);
@@ -576,8 +538,6 @@ export class GalaxyEngine {
       g.rebuild(config.particleCount);
     });
 
-    this.cosmicWeb.setPixelRatio(config.dpr);
-    this.gasClouds.setPixelRatio(config.dpr);
     this.nebula.setPixelRatio(config.dpr);
     this.starfield.setPixelRatio(config.dpr);
     this.foregroundDust.setPixelRatio(config.dpr);
@@ -603,8 +563,6 @@ export class GalaxyEngine {
         total += 5000;
       }
     });
-    total += this.cosmicWeb.points.geometry.attributes.position ? this.cosmicWeb.points.geometry.attributes.position.count : 0;
-    total += this.gasClouds.points.geometry.attributes.position ? this.gasClouds.points.geometry.attributes.position.count : 0;
     total += this.starfield.points.geometry.attributes.position ? this.starfield.points.geometry.attributes.position.count : 0;
     total += this.nebula.points.geometry.attributes.position ? this.nebula.points.geometry.attributes.position.count : 0;
     total += this.foregroundDust.points.geometry.attributes.position ? this.foregroundDust.points.geometry.attributes.position.count : 0;
@@ -721,16 +679,12 @@ export class GalaxyEngine {
       );
     });
 
-    // 9. Update Cosmic Web & Large-Scale Systems
-    this.cosmicWeb.update(effectiveTime, 1.0);
-    this.gasClouds.update(effectiveTime, 1.0);
-
-    // 10. Update Environment Subsystems
+    // 9. Update Environment Subsystems
     this.nebula.update(effectiveTime, this.entranceProgress);
     this.starfield.update(effectiveTime, this.entranceProgress);
     this.foregroundDust.update(effectiveTime, this.entranceProgress);
 
-    // 11. Update Relativistic Gravitational Lensing in Post-Processing
+    // 10. Update Relativistic Gravitational Lensing in Post-Processing
     if (activeGalaxy && activeGalaxy.config.hasBlackHole && activeGalaxy.config.blackHoleConfig) {
       const distToBH = this.camera.position.distanceTo(activeGalaxy.worldPosition);
       
@@ -751,14 +705,14 @@ export class GalaxyEngine {
       this.postProcessing.updateLensing(false, this.screenLensPos, 0.0);
     }
 
-    // 12. Render Post-Processing Pipeline
+    // 11. Render Post-Processing Pipeline
     if (this.postProcessing.isEnabled()) {
       this.postProcessing.render();
     } else {
       this.renderer.render(this.scene, this.camera);
     }
 
-    // 13. FPS & Universe State Telemetry
+    // 12. FPS & Universe State Telemetry
     this.frameCount++;
     const now = performance.now();
     if (now - this.lastFpsUpdate >= 500) {
@@ -802,8 +756,6 @@ export class GalaxyEngine {
     this.controls.dispose();
     this.galaxies.forEach((g) => g.dispose());
     this.galaxies.clear();
-    this.cosmicWeb.dispose();
-    this.gasClouds.dispose();
     this.nebula.dispose();
     this.starfield.dispose();
     this.foregroundDust.dispose();

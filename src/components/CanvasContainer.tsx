@@ -24,11 +24,8 @@ export const CanvasContainer: React.FC = () => {
   const [interactionState, setInteractionState] = useState<InteractionState>('CINEMATIC');
   const [universeState, setUniverseState] = useState<UniverseState>({
     activeGalaxyId: 'galaxy01',
-    activeGroupId: 'groupA',
     isNavigating: false,
     distanceToActive: 44,
-    scaleTier: 'GALACTIC_DISK',
-    scaleLabel: '95,000 LIGHT-YEARS // GALACTIC DISK',
   });
 
   const handleStatsUpdate = useCallback((newStats: SimulationStats) => {

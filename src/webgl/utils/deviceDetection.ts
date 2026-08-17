@@ -24,9 +24,9 @@ export function detectQualityTier(): QualityConfig {
     return {
       tier: 'low',
       particleCount: 100000,
-      nebulaCount: 2000,
-      starCount: 6000,
-      foregroundDustCount: 800,
+      nebulaCount: 4500,
+      starCount: 15000,
+      foregroundDustCount: 2000,
       dpr: Math.min(window.devicePixelRatio || 1, 1.5),
       bloomEnabled: true,
       bloomRadius: 0.30,

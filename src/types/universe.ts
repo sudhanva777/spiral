@@ -98,10 +98,7 @@ export interface GalaxyConfig {
 
 export interface UniverseState {
   activeGalaxyId: string;
-  activeGroupId: GalaxyGroupId;
   isNavigating: boolean;
   distanceToActive: number;
   activeBlackHole?: boolean;
-  scaleTier: 'COSMIC_WEB' | 'GALAXY_GROUP' | 'GALACTIC_DISK' | 'STELLAR_CORE' | 'SINGULARITY';
-  scaleLabel: string;
 }
