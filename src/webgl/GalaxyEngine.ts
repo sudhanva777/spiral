@@ -22,6 +22,12 @@ export class GalaxyEngine {
   private galaxies: Map<string, GalaxyInstance> = new Map();
   private activeGalaxyId = 'galaxy01';
 
+  // Hierarchical Star System & Planetary Focus State
+  private activeSystemId: string | null = null;
+  private activePlanetId: string | null = null;
+  private detectedSystemId: string | null = null;
+  private detectedSystemName: string | null = null;
+
   // Environmental Particle Subsystems (Deep Universe Starfield, Local Nebula, Foreground Dust)
   private nebula: NebulaParticles;
   private starfield: StarfieldParticles;
@@ -60,13 +66,15 @@ export class GalaxyEngine {
   private readonly defaultLookOffset = new THREE.Vector3(0, -1.0, 0);
   private readonly coreInspectOffset = new THREE.Vector3(0, 3.8, 8.5);
   private readonly blackHoleInspectOffset = new THREE.Vector3(0, 2.2, 5.8);
+  private readonly starSystemCamOffset = new THREE.Vector3(0, 2.4, 5.5);
+  private readonly planetCamOffset = new THREE.Vector3(0, 0.28, 0.62);
   private readonly blackHoleSafetyRadius = 3.2;
 
   private isInspectingCore = false;
   private coreInspectionFactor = 0.0;
   private targetCoreInspection = 0.0;
 
-  // Cinematic Camera Transitions (Navigation & Core Inspection)
+  // Cinematic Camera Transitions (Navigation, Star System, Planets, Core Inspection)
   private isTransitioningCamera = false;
   private camTransitionStartPos = new THREE.Vector3();
   private camTransitionTargetPos = new THREE.Vector3();
@@ -118,7 +126,7 @@ export class GalaxyEngine {
     this.scene.background = new THREE.Color(0x020208);
 
     // 2. Camera Setup — Starting position matches default composition
-    this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 2000);
+    this.camera = new THREE.PerspectiveCamera(45, width / height, 0.01, 2000);
     this.camera.position.copy(this.defaultCamOffset);
     this.camera.lookAt(this.defaultLookOffset);
 
@@ -176,10 +184,7 @@ export class GalaxyEngine {
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.06;
 
-    this.controls.enableZoom = true;
-    this.controls.zoomSpeed = 0.8;
-    this.controls.minDistance = 2.8;
-    this.controls.maxDistance = 600.0;
+    this.updateControlsScale();
 
     this.controls.minPolarAngle = 0.02;
     this.controls.maxPolarAngle = Math.PI - 0.02;
@@ -209,6 +214,25 @@ export class GalaxyEngine {
     this.animate();
   }
 
+  private updateControlsScale() {
+    if (this.activePlanetId) {
+      this.controls.minDistance = 0.08;
+      this.controls.maxDistance = 5.0;
+      this.controls.zoomSpeed = 0.25;
+      this.controls.panSpeed = 0.15;
+    } else if (this.activeSystemId) {
+      this.controls.minDistance = 0.35;
+      this.controls.maxDistance = 45.0;
+      this.controls.zoomSpeed = 0.45;
+      this.controls.panSpeed = 0.35;
+    } else {
+      this.controls.minDistance = 2.8;
+      this.controls.maxDistance = 600.0;
+      this.controls.zoomSpeed = 0.8;
+      this.controls.panSpeed = 0.7;
+    }
+  }
+
   private setState(newState: InteractionState) {
     if (this.currentState !== newState) {
       this.currentState = newState;
@@ -221,13 +245,24 @@ export class GalaxyEngine {
   private emitUniverseState() {
     if (this.universeStateCallback) {
       const active = this.getActiveGalaxy();
-      const dist = active ? Math.round(active.worldPosition.distanceTo(this.camera.position)) : 0;
+      let dist = active ? Math.round(active.worldPosition.distanceTo(this.camera.position)) : 0;
+
+      if (this.activeSystemId && active?.starSystems) {
+        const sys = active.starSystems.getSystem(this.activeSystemId);
+        if (sys) {
+          dist = Math.round(sys.worldPosition.distanceTo(this.camera.position));
+        }
+      }
 
       this.universeStateCallback({
         activeGalaxyId: this.activeGalaxyId,
         isNavigating: this.isTransitioningCamera,
         distanceToActive: dist,
         activeBlackHole: !!active?.config.hasBlackHole,
+        activeSystemId: this.activeSystemId,
+        activePlanetId: this.activePlanetId,
+        detectedSystemId: this.detectedSystemId,
+        detectedSystemName: this.detectedSystemName,
       });
     }
   }
@@ -253,13 +288,18 @@ export class GalaxyEngine {
    */
   public navigateToGalaxy(galaxyId: string) {
     const targetGalaxy = this.galaxies.get(galaxyId);
-    if (!targetGalaxy || (this.activeGalaxyId === galaxyId && !this.isInspectingCore && !this.isTransitioningCamera)) {
+    if (!targetGalaxy || (this.activeGalaxyId === galaxyId && !this.isInspectingCore && !this.isTransitioningCamera && !this.activeSystemId)) {
       return;
     }
 
     this.activeGalaxyId = galaxyId;
+    this.activeSystemId = null;
+    this.activePlanetId = null;
+    this.detectedSystemId = null;
+    this.detectedSystemName = null;
     this.isInspectingCore = false;
     this.targetCoreInspection = 0.0;
+    this.updateControlsScale();
     this.setState('CORE_TRANSITION');
 
     this.interactionPlane.constant = -targetGalaxy.worldPosition.y;
@@ -272,6 +312,85 @@ export class GalaxyEngine {
 
     this.startCameraTransition(targetCamPos, targetLookPos, flightDuration);
     this.emitUniverseState();
+  }
+
+  /**
+   * Smooth dive into a star system inside Galaxy 01
+   */
+  public enterStarSystem(systemId: string) {
+    const galaxy = this.galaxies.get('galaxy01');
+    if (!galaxy || !galaxy.starSystems) return;
+
+    const sys = galaxy.starSystems.getSystem(systemId);
+    if (!sys) return;
+
+    this.activeGalaxyId = 'galaxy01';
+    this.activeSystemId = systemId;
+    this.activePlanetId = null;
+    this.detectedSystemId = null;
+    this.detectedSystemName = null;
+    this.isInspectingCore = false;
+    this.targetCoreInspection = 0.0;
+    this.updateControlsScale();
+    this.setState('CORE_TRANSITION');
+
+    const targetCamPos = new THREE.Vector3().copy(sys.worldPosition).add(this.starSystemCamOffset);
+    const targetLookPos = new THREE.Vector3().copy(sys.worldPosition);
+
+    const flightDist = this.camera.position.distanceTo(targetCamPos);
+    const flightDuration = Math.min(Math.max(flightDist * 0.04, 1.0), 1.8);
+
+    this.startCameraTransition(targetCamPos, targetLookPos, flightDuration);
+    this.emitUniverseState();
+  }
+
+  /**
+   * Smooth close-up inspection of an orbiting planet
+   */
+  public enterPlanet(systemId: string, planetId: string) {
+    const galaxy = this.galaxies.get('galaxy01');
+    if (!galaxy || !galaxy.starSystems) return;
+
+    const sys = galaxy.starSystems.getSystem(systemId);
+    if (!sys) return;
+
+    const planetWorldPos = sys.getPlanetPositionWorld(planetId);
+    if (!planetWorldPos) return;
+
+    this.activeGalaxyId = 'galaxy01';
+    this.activeSystemId = systemId;
+    this.activePlanetId = planetId;
+    this.detectedSystemId = null;
+    this.detectedSystemName = null;
+    this.isInspectingCore = false;
+    this.updateControlsScale();
+    this.setState('CORE_TRANSITION');
+
+    const targetCamPos = new THREE.Vector3().copy(planetWorldPos).add(this.planetCamOffset);
+    const targetLookPos = new THREE.Vector3().copy(planetWorldPos);
+
+    this.startCameraTransition(targetCamPos, targetLookPos, 1.2);
+    this.emitUniverseState();
+  }
+
+  /**
+   * Back out from a planetary system or planet to the galaxy view
+   */
+  public exitStarSystem() {
+    if (this.activePlanetId) {
+      // Back out to Star System view
+      if (this.activeSystemId) {
+        this.enterStarSystem(this.activeSystemId);
+      } else {
+        this.resetCamera();
+      }
+      return;
+    }
+
+    this.activeSystemId = null;
+    this.activePlanetId = null;
+    this.updateControlsScale();
+    this.resetCamera();
   }
 
   private initEventListeners() {
@@ -358,7 +477,31 @@ export class GalaxyEngine {
     this.raycaster.setFromCamera(new THREE.Vector2(normX, normY), this.camera);
     const ray = this.raycaster.ray;
 
-    // Check if user clicked on another distant galaxy in the universe
+    // 1. If currently inside a star system, check if user clicked on a planet
+    if (this.activeSystemId && this.activeGalaxyId === 'galaxy01') {
+      const g01 = this.galaxies.get('galaxy01');
+      if (g01?.starSystems) {
+        const hitPlanet = g01.starSystems.findIntersectedPlanet(ray, this.activeSystemId);
+        if (hitPlanet) {
+          this.enterPlanet(this.activeSystemId, hitPlanet.planetId);
+          return;
+        }
+      }
+    }
+
+    // 2. If in Galaxy 01, check if user clicked directly on a Star System
+    if (this.activeGalaxyId === 'galaxy01' && !this.activeSystemId) {
+      const g01 = this.galaxies.get('galaxy01');
+      if (g01?.starSystems) {
+        const hitSys = g01.starSystems.findIntersectedSystem(ray);
+        if (hitSys) {
+          this.enterStarSystem(hitSys.config.id);
+          return;
+        }
+      }
+    }
+
+    // 3. Check if user clicked on another distant galaxy in the universe
     for (const [id, galaxy] of this.galaxies.entries()) {
       if (id !== this.activeGalaxyId) {
         const distRayToGalaxy = ray.distanceToPoint(galaxy.worldPosition);
@@ -369,7 +512,7 @@ export class GalaxyEngine {
       }
     }
 
-    // Local energy wave pulse on active galaxy
+    // 4. Local energy wave pulse on active galaxy
     const hitPoint = new THREE.Vector3();
     const activeGalaxy = this.getActiveGalaxy();
 
@@ -398,11 +541,28 @@ export class GalaxyEngine {
       return;
     }
 
+    if (this.activePlanetId) {
+      this.exitStarSystem();
+      return;
+    }
+
     const normX = (clientX / window.innerWidth) * 2 - 1;
     const normY = -(clientY / window.innerHeight) * 2 + 1;
 
     this.raycaster.setFromCamera(new THREE.Vector2(normX, normY), this.camera);
     const ray = this.raycaster.ray;
+
+    // Check Star System hit in Galaxy 01
+    if (this.activeGalaxyId === 'galaxy01' && !this.activeSystemId) {
+      const g01 = this.galaxies.get('galaxy01');
+      if (g01?.starSystems) {
+        const hitSys = g01.starSystems.findIntersectedSystem(ray);
+        if (hitSys) {
+          this.enterStarSystem(hitSys.config.id);
+          return;
+        }
+      }
+    }
 
     for (const [id, galaxy] of this.galaxies.entries()) {
       if (id !== this.activeGalaxyId) {
@@ -487,6 +647,9 @@ export class GalaxyEngine {
       this.isInspectingCore = false;
       this.targetCoreInspection = 0.0;
     }
+    this.activeSystemId = null;
+    this.activePlanetId = null;
+    this.updateControlsScale();
     this.setState('RETURNING');
     const targetPos = new THREE.Vector3().copy(active.worldPosition).add(this.defaultCamOffset);
     const targetLook = new THREE.Vector3().copy(active.worldPosition).add(this.defaultLookOffset);
@@ -497,7 +660,11 @@ export class GalaxyEngine {
     const active = document.activeElement;
     if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
 
-    if (e.key === 'r' || e.key === 'R') {
+    if (e.key === 'Escape') {
+      if (this.activePlanetId || this.activeSystemId) {
+        this.exitStarSystem();
+      }
+    } else if (e.key === 'r' || e.key === 'R') {
       this.resetCamera();
     } else if (e.key === 'c' || e.key === 'C') {
       this.toggleCoreInspection();
@@ -623,7 +790,7 @@ export class GalaxyEngine {
     // 4. Core Inspection LOD Factor Interpolation
     this.coreInspectionFactor += (this.targetCoreInspection - this.coreInspectionFactor) * (delta * 3.5);
 
-    // 5. Cinematic Camera Transitions (Navigation between galaxies & Core Inspection)
+    // 5. Cinematic Camera Transitions
     if (this.isTransitioningCamera) {
       this.camTransitionProgress += delta / this.camTransitionDuration;
       const t = Math.min(this.camTransitionProgress, 1.0);
@@ -637,6 +804,20 @@ export class GalaxyEngine {
         this.isTransitioningCamera = false;
         this.setState(this.isInspectingCore ? 'CORE_INSPECTION' : 'EXPLORING');
         this.emitUniverseState();
+      }
+    } else if (this.activePlanetId && this.activeSystemId) {
+      // Dynamic camera tracking for moving planet
+      const g01 = this.galaxies.get('galaxy01');
+      if (g01?.starSystems) {
+        const sys = g01.starSystems.getSystem(this.activeSystemId);
+        if (sys) {
+          const currentPlanetPos = sys.getPlanetPositionWorld(this.activePlanetId);
+          if (currentPlanetPos) {
+            const lookOffset = new THREE.Vector3().subVectors(this.camera.position, this.controls.target);
+            this.controls.target.copy(currentPlanetPos);
+            this.camera.position.copy(currentPlanetPos).add(lookOffset);
+          }
+        }
       }
     }
 
@@ -675,16 +856,36 @@ export class GalaxyEngine {
         this.pulseOrigin,
         this.pulseProgress,
         isActive ? this.pulseStrength : 0.0,
-        isActive ? this.coreInspectionFactor : 0.0
+        isActive ? this.coreInspectionFactor : 0.0,
+        this.camera
       );
     });
 
-    // 9. Update Environment Subsystems
+    // 9. Proximity Detection for Star Systems in Galaxy 01
+    if (this.activeGalaxyId === 'galaxy01' && !this.activeSystemId && !this.isTransitioningCamera) {
+      const g01 = this.galaxies.get('galaxy01');
+      if (g01?.starSystems) {
+        const closest = g01.starSystems.getClosestSystem(this.camera.position);
+        if (closest && closest.distance < 18.0) {
+          if (this.detectedSystemId !== closest.system.config.id) {
+            this.detectedSystemId = closest.system.config.id;
+            this.detectedSystemName = closest.system.config.name;
+            this.emitUniverseState();
+          }
+        } else if (this.detectedSystemId !== null) {
+          this.detectedSystemId = null;
+          this.detectedSystemName = null;
+          this.emitUniverseState();
+        }
+      }
+    }
+
+    // 10. Update Environment Subsystems
     this.nebula.update(effectiveTime, this.entranceProgress);
     this.starfield.update(effectiveTime, this.entranceProgress);
     this.foregroundDust.update(effectiveTime, this.entranceProgress);
 
-    // 10. Update Relativistic Gravitational Lensing in Post-Processing
+    // 11. Update Relativistic Gravitational Lensing in Post-Processing
     if (activeGalaxy && activeGalaxy.config.hasBlackHole && activeGalaxy.config.blackHoleConfig) {
       const distToBH = this.camera.position.distanceTo(activeGalaxy.worldPosition);
       
@@ -705,14 +906,14 @@ export class GalaxyEngine {
       this.postProcessing.updateLensing(false, this.screenLensPos, 0.0);
     }
 
-    // 11. Render Post-Processing Pipeline
+    // 12. Render Post-Processing Pipeline
     if (this.postProcessing.isEnabled()) {
       this.postProcessing.render();
     } else {
       this.renderer.render(this.scene, this.camera);
     }
 
-    // 12. FPS & Universe State Telemetry
+    // 13. FPS & Universe State Telemetry
     this.frameCount++;
     const now = performance.now();
     if (now - this.lastFpsUpdate >= 500) {

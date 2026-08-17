@@ -95,6 +95,24 @@ export const CanvasContainer: React.FC = () => {
     }
   };
 
+  const handleSelectStarSystem = (systemId: string) => {
+    if (engineRef.current) {
+      engineRef.current.enterStarSystem(systemId);
+    }
+  };
+
+  const handleSelectPlanet = (systemId: string, planetId: string) => {
+    if (engineRef.current) {
+      engineRef.current.enterPlanet(systemId, planetId);
+    }
+  };
+
+  const handleExitStarSystem = () => {
+    if (engineRef.current) {
+      engineRef.current.exitStarSystem();
+    }
+  };
+
   if (!hasWebGL) {
     return <WebGLFallback />;
   }
@@ -115,6 +133,9 @@ export const CanvasContainer: React.FC = () => {
         onResetCamera={handleResetCamera}
         onToggleCoreInspection={handleToggleCoreInspection}
         onSelectGalaxy={handleSelectGalaxy}
+        onSelectStarSystem={handleSelectStarSystem}
+        onSelectPlanet={handleSelectPlanet}
+        onExitStarSystem={handleExitStarSystem}
       />
     </div>
   );

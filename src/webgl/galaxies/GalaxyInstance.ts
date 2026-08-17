@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GalaxyParticles } from '../particles/GalaxyParticles';
 import { EnergyJetSystem } from './effects/EnergyJetSystem';
 import { BlackHoleSystem } from './effects/BlackHoleSystem';
+import { StarSystemManager } from '../starsystems/StarSystemManager';
 import type { GalaxyConfig } from '../../types/universe';
 import type { GalaxyPreset } from '../../types/simulation';
 
@@ -35,6 +36,7 @@ export class GalaxyInstance {
   public particles: GalaxyParticles;
   public energyJets?: EnergyJetSystem;
   public blackHole?: BlackHoleSystem;
+  public starSystems?: StarSystemManager;
   public worldPosition: THREE.Vector3;
   public boundingRadius = 45.0;
   public currentDistanceToCamera = 0;
@@ -71,6 +73,12 @@ export class GalaxyInstance {
       this.energyJets = new EnergyJetSystem(jetParticles);
       this.group.add(this.energyJets.points);
     }
+
+    // Hierarchical Planetary Star Systems (Phase 1: Galaxy 01 / Prime Galaxy)
+    if (config.id === 'galaxy01') {
+      this.starSystems = new StarSystemManager();
+      this.group.add(this.starSystems.group);
+    }
   }
 
   public update(
@@ -81,7 +89,8 @@ export class GalaxyInstance {
     worldPulseOrigin?: THREE.Vector3,
     pulseProgress = 0.0,
     pulseStrength = 0.0,
-    coreInspection = 0.0
+    coreInspection = 0.0,
+    camera?: THREE.Camera
   ) {
     // Transform world mouse coordinate into galaxy local coordinate space
     this.localMouse3D.copy(worldMouse3D);
@@ -111,6 +120,10 @@ export class GalaxyInstance {
 
     if (this.energyJets) {
       this.energyJets.update(time, this.currentLOD);
+    }
+
+    if (this.starSystems && camera) {
+      this.starSystems.update(time, camera);
     }
   }
 
@@ -144,8 +157,12 @@ export class GalaxyInstance {
   }
 
   public rebuild(totalUniverseParticles: number) {
+    this.group.remove(this.particles.points);
+    this.particles.dispose();
+
     const count = getParticleCountForGalaxy(this.config, totalUniverseParticles);
-    this.particles.rebuild(count, this.config);
+    this.particles = new GalaxyParticles(count, this.config);
+    this.group.add(this.particles.points);
   }
 
   public dispose() {
@@ -156,6 +173,8 @@ export class GalaxyInstance {
     if (this.energyJets) {
       this.energyJets.dispose();
     }
-    this.group.clear();
+    if (this.starSystems) {
+      this.starSystems.dispose();
+    }
   }
 }
