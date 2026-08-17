@@ -13,6 +13,28 @@ export interface GalaxyPalette {
   ambientStars: string[];
 }
 
+export interface BlackHolePalette {
+  horizonRim: string;
+  photonRing: string;
+  accretionInner: string;
+  accretionMid: string;
+  accretionOuter: string;
+  infallStream: string;
+}
+
+export interface BlackHoleConfig {
+  eventHorizonRadius: number;
+  photonRingRadius: number;
+  accretionInnerRadius: number;
+  accretionOuterRadius: number;
+  diskTilt: [number, number, number];
+  rotationSpeed: number;
+  infallRate: number;
+  turbulence: number;
+  lensingStrength: number;
+  palette: BlackHolePalette;
+}
+
 export interface GalaxyMorphology {
   type:
     | 'barred-spiral'
@@ -50,6 +72,8 @@ export interface GalaxyConfig {
   turbulence: number;
   boundingRadius?: number;
   specialEffect?: 'energy-jets' | null;
+  hasBlackHole?: boolean;
+  blackHoleConfig?: BlackHoleConfig;
   palette: GalaxyPalette;
   morphology: GalaxyMorphology;
 }
@@ -58,4 +82,5 @@ export interface UniverseState {
   activeGalaxyId: string;
   isNavigating: boolean;
   distanceToActive: number;
+  activeBlackHole?: boolean;
 }

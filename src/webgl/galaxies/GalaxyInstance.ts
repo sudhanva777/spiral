@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GalaxyParticles } from '../particles/GalaxyParticles';
 import { EnergyJetSystem } from './effects/EnergyJetSystem';
+import { BlackHoleSystem } from './effects/BlackHoleSystem';
 import type { GalaxyConfig } from '../../types/universe';
 import type { GalaxyPreset } from '../../types/simulation';
 
@@ -9,6 +10,7 @@ export class GalaxyInstance {
   public group: THREE.Group;
   public particles: GalaxyParticles;
   public energyJets?: EnergyJetSystem;
+  public blackHole?: BlackHoleSystem;
   public worldPosition: THREE.Vector3;
   public boundingRadius = 45.0;
   public currentDistanceToCamera = 0;
@@ -32,7 +34,14 @@ export class GalaxyInstance {
     this.particles = new GalaxyParticles(count, config);
     this.group.add(this.particles.points);
 
-    // Optional modular special effect (e.g. Relativistic Energy Jets for Galaxy 06)
+    // Modular Living Supermassive Black Hole System (Galaxies 02-06)
+    if (config.hasBlackHole && config.blackHoleConfig) {
+      const bhParticles = Math.min(Math.round(particleCount * 0.05), 5000);
+      this.blackHole = new BlackHoleSystem(config.blackHoleConfig, bhParticles);
+      this.group.add(this.blackHole.group);
+    }
+
+    // Modular special effect (e.g. Relativistic Energy Jets for Galaxy 06)
     if (config.specialEffect === 'energy-jets') {
       const jetParticles = Math.min(Math.round(particleCount * 0.04), 4500);
       this.energyJets = new EnergyJetSystem(jetParticles);
@@ -71,6 +80,12 @@ export class GalaxyInstance {
       coreInspection
     );
 
+    if (this.blackHole) {
+      // Dynamic Black Hole LOD: reveal accretion disk and photon ring progressively as camera nears
+      const bhLOD = this.currentDistanceToCamera < 45.0 ? 1.0 : this.currentLOD;
+      this.blackHole.update(time, bhLOD);
+    }
+
     if (this.energyJets) {
       this.energyJets.update(time, this.currentLOD);
     }
@@ -96,6 +111,9 @@ export class GalaxyInstance {
 
   public setPixelRatio(dpr: number) {
     this.particles.setPixelRatio(dpr);
+    if (this.blackHole) {
+      this.blackHole.setPixelRatio(dpr);
+    }
     if (this.energyJets) {
       this.energyJets.setPixelRatio(dpr);
     }
@@ -112,6 +130,9 @@ export class GalaxyInstance {
 
   public dispose() {
     this.particles.dispose();
+    if (this.blackHole) {
+      this.blackHole.dispose();
+    }
     if (this.energyJets) {
       this.energyJets.dispose();
     }

@@ -150,7 +150,9 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           </div>
           <div className="brand-text">
             <h1 className="brand-title">A E T H E R // U N I V E R S E</h1>
-            <span className="brand-sub">{activeGalaxy.name.toUpperCase()} • CONTINUOUS 3D MULTI-GALAXY ENGINE</span>
+            <span className="brand-sub">
+              {activeGalaxy.name.toUpperCase()} • {activeGalaxy.hasBlackHole ? 'SUPERMASSIVE SINGULARITY' : 'KEPLERIAN CORE'} • CONTINUOUS 3D ENGINE
+            </span>
           </div>
         </div>
 
@@ -196,7 +198,9 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           {isCoreInspecting && (
             <div className="telemetry-chip active-core-chip">
               <Crosshair className="chip-icon text-pink-300 animate-pulse" />
-              <span className="chip-label text-pink-300">CORE INSPECTION</span>
+              <span className="chip-label text-pink-300">
+                {activeGalaxy.hasBlackHole ? 'EVENT HORIZON // LENSING' : 'CORE INSPECTION'}
+              </span>
             </div>
           )}
 

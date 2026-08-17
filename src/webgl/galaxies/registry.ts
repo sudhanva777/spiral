@@ -1,7 +1,7 @@
-import type { GalaxyConfig, GalaxyPalette, GalaxyMorphology } from '../../types/universe';
+import type { GalaxyConfig, GalaxyPalette, GalaxyMorphology, BlackHoleConfig } from '../../types/universe';
 
 // ============================================================================
-// GALAXY 01 — AETHER PRIME (Barred Spiral)
+// GALAXY 01 — AETHER PRIME (Reference Quality Baseline — No Black Hole)
 // ============================================================================
 export const GALAXY_01_PALETTE: GalaxyPalette = {
   core: '#FFF8FF',
@@ -44,12 +44,13 @@ export const GALAXY_01_CONFIG: GalaxyConfig = {
   speed: 0.28,
   turbulence: 0.8,
   boundingRadius: 42.0,
+  hasBlackHole: false, // Preserved baseline reference
   palette: GALAXY_01_PALETTE,
   morphology: GALAXY_01_MORPHOLOGY,
 };
 
 // ============================================================================
-// GALAXY 02 — IGNIS VESPER (Flocculent Ringed Spiral)
+// GALAXY 02 — IGNIS VESPER (Flocculent Ringed Spiral + Supermassive Black Hole)
 // ============================================================================
 export const GALAXY_02_PALETTE: GalaxyPalette = {
   core: '#FFF4D6',
@@ -80,11 +81,31 @@ export const GALAXY_02_MORPHOLOGY: GalaxyMorphology = {
   spiralTightness: 3.6,
 };
 
+export const GALAXY_02_BLACK_HOLE: BlackHoleConfig = {
+  eventHorizonRadius: 0.95,
+  photonRingRadius: 1.45,
+  accretionInnerRadius: 1.6,
+  accretionOuterRadius: 7.5,
+  diskTilt: [0.35, 0.15, -0.2],
+  rotationSpeed: 1.8,
+  infallRate: 1.2,
+  turbulence: 0.9,
+  lensingStrength: 1.0,
+  palette: {
+    horizonRim: '#FFD27A',
+    photonRing: '#FFF4D6',
+    accretionInner: '#FFB84D',
+    accretionMid: '#C45A17',
+    accretionOuter: '#7F1D1D',
+    infallStream: '#FF5E78',
+  },
+};
+
 export const GALAXY_02_CONFIG: GalaxyConfig = {
   id: 'galaxy02',
   name: 'Ignis Vesper',
-  subtitle: 'Flocculent Ring • Crimson Nursery',
-  description: 'Asymmetric ringed flocculent spiral featuring warm golden nucleus, vivid magenta arms, and deep burgundy dust.',
+  subtitle: 'Flocculent Ring • Golden Singularity',
+  description: 'Asymmetric ringed flocculent spiral hosting a supermassive black hole with warm golden accretion disk and deep burgundy dust.',
   type: 'flocculent-ring',
   position: [185, -15, 210],
   rotation: [-0.25, 0.45, 0.15],
@@ -92,12 +113,14 @@ export const GALAXY_02_CONFIG: GalaxyConfig = {
   speed: 0.32,
   turbulence: 0.95,
   boundingRadius: 45.0,
+  hasBlackHole: true,
+  blackHoleConfig: GALAXY_02_BLACK_HOLE,
   palette: GALAXY_02_PALETTE,
   morphology: GALAXY_02_MORPHOLOGY,
 };
 
 // ============================================================================
-// GALAXY 03 — VERDANT (Emerald Deep)
+// GALAXY 03 — VERDANT (Emerald Deep + Teal Supermassive Black Hole)
 // ============================================================================
 export const GALAXY_03_PALETTE: GalaxyPalette = {
   core: '#F5FFF8',
@@ -123,16 +146,36 @@ export const GALAXY_03_MORPHOLOGY: GalaxyMorphology = {
   diskFlattening: 0.45,
   coreDensity: 1.1,
   dustDensity: 1.3,
-  verticalThickness: 1.6, // Deep multi-layered 3D depth profile
+  verticalThickness: 1.6,
   starFormationDensity: 1.4,
   spiralTightness: 3.8,
+};
+
+export const GALAXY_03_BLACK_HOLE: BlackHoleConfig = {
+  eventHorizonRadius: 1.05,
+  photonRingRadius: 1.55,
+  accretionInnerRadius: 1.7,
+  accretionOuterRadius: 8.2,
+  diskTilt: [-0.2, 0.3, 0.1],
+  rotationSpeed: 2.1,
+  infallRate: 1.35,
+  turbulence: 0.85,
+  lensingStrength: 1.1,
+  palette: {
+    horizonRim: '#D8FFE8',
+    photonRing: '#F5FFF8',
+    accretionInner: '#8FFFC1',
+    accretionMid: '#28C7A5',
+    accretionOuter: '#075C3D',
+    infallStream: '#A7FF5A',
+  },
 };
 
 export const GALAXY_03_CONFIG: GalaxyConfig = {
   id: 'galaxy03',
   name: 'Verdant',
-  subtitle: 'Emerald Deep • Molecular Nursery',
-  description: 'Deep volumetric emerald spiral with 3 major arms, layered dark green dust belts, and luminous lime-green starburst clusters.',
+  subtitle: 'Emerald Deep • Teal Singularity',
+  description: 'Deep volumetric emerald spiral with 3 major arms, layered dark green dust, and a living teal supermassive black hole.',
   type: 'emerald-multi-arm',
   position: [-135, 18, -80],
   rotation: [0.18, -0.35, -0.12],
@@ -140,12 +183,14 @@ export const GALAXY_03_CONFIG: GalaxyConfig = {
   speed: 0.26,
   turbulence: 0.85,
   boundingRadius: 46.0,
+  hasBlackHole: true,
+  blackHoleConfig: GALAXY_03_BLACK_HOLE,
   palette: GALAXY_03_PALETTE,
   morphology: GALAXY_03_MORPHOLOGY,
 };
 
 // ============================================================================
-// GALAXY 04 — ECLIPSE (Golden Eclipse)
+// GALAXY 04 — ECLIPSE (Golden Eclipse + High-Contrast Black Hole)
 // ============================================================================
 export const GALAXY_04_PALETTE: GalaxyPalette = {
   core: '#FFF4C2',
@@ -166,7 +211,7 @@ export const GALAXY_04_MORPHOLOGY: GalaxyMorphology = {
   type: 'golden-dark-barred',
   armCount: 2,
   asymmetry: 0.55,
-  barStrength: 1.1, // Massive prominent golden bar
+  barStrength: 1.1,
   ringStrength: 0.0,
   diskFlattening: 0.6,
   coreDensity: 1.3,
@@ -174,15 +219,35 @@ export const GALAXY_04_MORPHOLOGY: GalaxyMorphology = {
   verticalThickness: 1.2,
   starFormationDensity: 1.1,
   spiralTightness: 3.0,
-  darkLaneStrength: 1.4, // Dark dust belts with high contrast
+  darkLaneStrength: 1.4,
   voidStrength: 0.8,
+};
+
+export const GALAXY_04_BLACK_HOLE: BlackHoleConfig = {
+  eventHorizonRadius: 1.15,
+  photonRingRadius: 1.65,
+  accretionInnerRadius: 1.8,
+  accretionOuterRadius: 9.0,
+  diskTilt: [0.4, -0.25, 0.3],
+  rotationSpeed: 2.4,
+  infallRate: 1.5,
+  turbulence: 1.0,
+  lensingStrength: 1.2,
+  palette: {
+    horizonRim: '#FFD966',
+    photonRing: '#FFF4C2',
+    accretionInner: '#F2C94C',
+    accretionMid: '#C69214',
+    accretionOuter: '#3A2108',
+    infallStream: '#FFAE33',
+  },
 };
 
 export const GALAXY_04_CONFIG: GalaxyConfig = {
   id: 'galaxy04',
   name: 'Eclipse',
-  subtitle: 'Golden Eclipse • Relativistic Bar',
-  description: 'Ancient thick barred spiral characterized by an elongated golden central bar, high-contrast black dust lanes, and amber star streams.',
+  subtitle: 'Golden Eclipse • Relativistic Horizon',
+  description: 'Ancient thick barred spiral featuring an elongated golden bar, high-contrast black dust voids, and an intense amber supermassive black hole.',
   type: 'golden-dark-barred',
   position: [-45, 42, -210],
   rotation: [0.35, 0.2, -0.4],
@@ -190,12 +255,14 @@ export const GALAXY_04_CONFIG: GalaxyConfig = {
   speed: 0.34,
   turbulence: 0.9,
   boundingRadius: 48.0,
+  hasBlackHole: true,
+  blackHoleConfig: GALAXY_04_BLACK_HOLE,
   palette: GALAXY_04_PALETTE,
   morphology: GALAXY_04_MORPHOLOGY,
 };
 
 // ============================================================================
-// GALAXY 05 — RED VEIL (Death Red)
+// GALAXY 05 — RED VEIL (Death Red + Violent Crimson Singularity)
 // ============================================================================
 export const GALAXY_05_PALETTE: GalaxyPalette = {
   core: '#FFF1DC',
@@ -215,22 +282,42 @@ export const GALAXY_05_PALETTE: GalaxyPalette = {
 export const GALAXY_05_MORPHOLOGY: GalaxyMorphology = {
   type: 'turbulent-crimson',
   armCount: 3,
-  asymmetry: 0.75, // High asymmetry
+  asymmetry: 0.75,
   barStrength: 0.3,
   ringStrength: 0.2,
   diskFlattening: 0.5,
   coreDensity: 1.2,
   dustDensity: 1.35,
   verticalThickness: 1.45,
-  starFormationDensity: 1.5, // Violent star-forming hotspots
+  starFormationDensity: 1.5,
   spiralTightness: 3.5,
+};
+
+export const GALAXY_05_BLACK_HOLE: BlackHoleConfig = {
+  eventHorizonRadius: 1.10,
+  photonRingRadius: 1.60,
+  accretionInnerRadius: 1.75,
+  accretionOuterRadius: 8.5,
+  diskTilt: [-0.35, -0.15, 0.45],
+  rotationSpeed: 2.6,
+  infallRate: 1.6,
+  turbulence: 1.25,
+  lensingStrength: 1.25,
+  palette: {
+    horizonRim: '#FF9E2C',
+    photonRing: '#FFF1DC',
+    accretionInner: '#FF6B1A',
+    accretionMid: '#FF304F',
+    accretionOuter: '#56000D',
+    infallStream: '#FF304F',
+  },
 };
 
 export const GALAXY_05_CONFIG: GalaxyConfig = {
   id: 'galaxy05',
   name: 'Red Veil',
-  subtitle: 'Violent Crimson • Plasma Tempest',
-  description: 'Dynamically unstable dark crimson galaxy with 2 dominant arms, fragmented outer jets, and dense white-hot starburst cavities.',
+  subtitle: 'Violent Crimson • Plasma Singularity',
+  description: 'Dynamically unstable dark crimson galaxy with 2 dominant arms and a violently active red/orange supermassive black hole.',
   type: 'turbulent-crimson',
   position: [95, -25, 90],
   rotation: [-0.3, -0.15, 0.25],
@@ -238,12 +325,14 @@ export const GALAXY_05_CONFIG: GalaxyConfig = {
   speed: 0.38,
   turbulence: 1.15,
   boundingRadius: 47.0,
+  hasBlackHole: true,
+  blackHoleConfig: GALAXY_05_BLACK_HOLE,
   palette: GALAXY_05_PALETTE,
   morphology: GALAXY_05_MORPHOLOGY,
 };
 
 // ============================================================================
-// GALAXY 06 — AETHERIS (Celestial Forge — Largest Centerpiece)
+// GALAXY 06 — AETHERIS (Celestial Forge — Largest Centerpiece Supermassive Black Hole)
 // ============================================================================
 export const GALAXY_06_PALETTE: GalaxyPalette = {
   core: '#FFFFFF',
@@ -262,7 +351,7 @@ export const GALAXY_06_PALETTE: GalaxyPalette = {
 
 export const GALAXY_06_MORPHOLOGY: GalaxyMorphology = {
   type: 'massive-energy-spiral',
-  armCount: 4, // 4 grand design spiral arms + secondary branches
+  armCount: 4,
   asymmetry: 0.3,
   barStrength: 0.5,
   ringStrength: 0.4,
@@ -274,19 +363,41 @@ export const GALAXY_06_MORPHOLOGY: GalaxyMorphology = {
   spiralTightness: 3.4,
 };
 
+export const GALAXY_06_BLACK_HOLE: BlackHoleConfig = {
+  eventHorizonRadius: 1.45,
+  photonRingRadius: 2.10,
+  accretionInnerRadius: 2.3,
+  accretionOuterRadius: 12.5,
+  diskTilt: [0.15, 0.2, -0.08],
+  rotationSpeed: 2.2,
+  infallRate: 1.4,
+  turbulence: 0.95,
+  lensingStrength: 1.4,
+  palette: {
+    horizonRim: '#B8F5FF',
+    photonRing: '#FFFFFF',
+    accretionInner: '#00D9FF',
+    accretionMid: '#1687FF',
+    accretionOuter: '#FF6B1A',
+    infallStream: '#FF9A3D',
+  },
+};
+
 export const GALAXY_06_CONFIG: GalaxyConfig = {
   id: 'galaxy06',
   name: 'Aetheris',
-  subtitle: 'Celestial Forge • Relativistic Jets',
-  description: 'The monumental visual centerpiece of the universe — an enormous 4-arm celestial spiral featuring continuous opposing relativistic energy beams.',
+  subtitle: 'Celestial Forge • Supermassive Singularity',
+  description: 'The monumental visual centerpiece of the universe — an enormous 4-arm celestial spiral with a central supermassive black hole powering dual relativistic energy beams.',
   type: 'massive-energy-spiral',
   position: [165, 28, -120],
   rotation: [0.12, 0.28, -0.05],
-  scale: 1.38, // Significantly larger visual scale
+  scale: 1.38,
   speed: 0.30,
   turbulence: 0.88,
   boundingRadius: 62.0,
   specialEffect: 'energy-jets',
+  hasBlackHole: true,
+  blackHoleConfig: GALAXY_06_BLACK_HOLE,
   palette: GALAXY_06_PALETTE,
   morphology: GALAXY_06_MORPHOLOGY,
 };

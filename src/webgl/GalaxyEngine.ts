@@ -35,7 +35,7 @@ export class GalaxyEngine {
   private stateChangeCallback?: (state: InteractionState) => void;
   private universeStateCallback?: (state: UniverseState) => void;
 
-  // Phase 3: Interactive Gravitational Field State
+  // Interactive Gravitational Field State
   private mouse2D = new THREE.Vector2(0, 0);
   private targetMouse2D = new THREE.Vector2(0, 0);
   private worldMouse3D = new THREE.Vector3(0, 0, 0);
@@ -46,7 +46,7 @@ export class GalaxyEngine {
   private targetMouseInfluence = 0.0;
   private lastMouseMoveTime = 0;
 
-  // Phase 4: Click & Energy Wave Pulse State
+  // Click & Energy Wave Pulse State
   private pointerDownPos = new THREE.Vector2(0, 0);
   private pointerDownTime = 0;
   private pulseOrigin = new THREE.Vector3(0, 0, 0);
@@ -60,6 +60,8 @@ export class GalaxyEngine {
   private readonly defaultCamOffset = new THREE.Vector3(0, 22, 38);
   private readonly defaultLookOffset = new THREE.Vector3(0, -1.0, 0);
   private readonly coreInspectOffset = new THREE.Vector3(0, 3.8, 8.5);
+  private readonly blackHoleInspectOffset = new THREE.Vector3(0, 2.2, 5.8);
+  private readonly blackHoleSafetyRadius = 3.2;
 
   private isInspectingCore = false;
   private coreInspectionFactor = 0.0;
@@ -89,6 +91,10 @@ export class GalaxyEngine {
   private lastFpsUpdate = 0;
   private currentFps = 60;
   private statsCallback?: (stats: SimulationStats) => void;
+
+  // Temp vectors for gravitational lensing & projection
+  private projectedScreenPos = new THREE.Vector3();
+  private screenLensPos = new THREE.Vector2(0.5, 0.5);
 
   constructor(
     container: HTMLElement,
@@ -135,9 +141,8 @@ export class GalaxyEngine {
 
     container.appendChild(this.renderer.domElement);
 
-    // 4. Universe Galaxies Setup (Galaxy 01 + Galaxy 02 in the same continuous 3D scene)
+    // 4. Universe Galaxies Setup (All 6 Galaxies in the same continuous 3D scene)
     UNIVERSE_GALAXIES.forEach((galaxyConfig) => {
-      // Allocate particle count per galaxy based on tier
       const galaxyInstance = new GalaxyInstance(galaxyConfig, config.particleCount);
       this.galaxies.set(galaxyConfig.id, galaxyInstance);
       this.scene.add(galaxyInstance.group);
@@ -152,7 +157,7 @@ export class GalaxyEngine {
     this.scene.add(this.nebula.points);
     this.scene.add(this.foregroundDust.points);
 
-    // 6. Post-Processing Pipeline
+    // 6. Post-Processing Pipeline (Bloom, Gravitational Lensing, Cosmic Vignette)
     this.postProcessing = new PostProcessingPipeline(
       this.renderer,
       this.scene,
@@ -164,7 +169,7 @@ export class GalaxyEngine {
     );
     this.postProcessing.setEnabled(config.bloomEnabled);
 
-    // 7. Interaction Plane in Universe Equator (XZ Plane at active galaxy Y)
+    // 7. Interaction Plane in Universe Equator
     this.interactionPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
     // 8. OrbitControls — 360° Orbit, Zoom, Pan, Damping
@@ -175,7 +180,7 @@ export class GalaxyEngine {
 
     this.controls.enableZoom = true;
     this.controls.zoomSpeed = 0.8;
-    this.controls.minDistance = 3.5;
+    this.controls.minDistance = 2.8;
     this.controls.maxDistance = 500.0;
 
     this.controls.minPolarAngle = 0.02;
@@ -223,6 +228,7 @@ export class GalaxyEngine {
         activeGalaxyId: this.activeGalaxyId,
         isNavigating: this.isTransitioningCamera,
         distanceToActive: dist,
+        activeBlackHole: !!active?.config.hasBlackHole,
       });
     }
   }
@@ -245,7 +251,7 @@ export class GalaxyEngine {
 
   /**
    * Seamless Inter-Galactic Navigation
-   * Flies smoothly through deep space from current position to the target galaxy
+   * Flies smoothly through deep space between any pair of galaxies
    */
   public navigateToGalaxy(galaxyId: string) {
     const targetGalaxy = this.galaxies.get(galaxyId);
@@ -258,13 +264,11 @@ export class GalaxyEngine {
     this.targetCoreInspection = 0.0;
     this.setState('CORE_TRANSITION');
 
-    // Update interaction plane to active galaxy Y position
     this.interactionPlane.constant = -targetGalaxy.worldPosition.y;
 
     const targetCamPos = new THREE.Vector3().copy(targetGalaxy.worldPosition).add(this.defaultCamOffset);
     const targetLookPos = new THREE.Vector3().copy(targetGalaxy.worldPosition).add(this.defaultLookOffset);
 
-    // Dynamic travel duration based on deep space distance
     const flightDist = this.camera.position.distanceTo(targetCamPos);
     const flightDuration = Math.min(Math.max(flightDist * 0.005, 1.2), 2.2);
 
@@ -349,9 +353,6 @@ export class GalaxyEngine {
     this.handleDoubleActionAtScreen(e.clientX, e.clientY);
   }
 
-  /**
-   * Phase 4: Click Disturbance, Energy Wave Pulse, or Distant Galaxy Selection
-   */
   private handleCanvasClick(clientX: number, clientY: number) {
     const normX = (clientX / window.innerWidth) * 2 - 1;
     const normY = -(clientY / window.innerHeight) * 2 + 1;
@@ -359,19 +360,18 @@ export class GalaxyEngine {
     this.raycaster.setFromCamera(new THREE.Vector2(normX, normY), this.camera);
     const ray = this.raycaster.ray;
 
-    // Check if user clicked on any other distant galaxy in the universe
+    // Check if user clicked on another distant galaxy
     for (const [id, galaxy] of this.galaxies.entries()) {
       if (id !== this.activeGalaxyId) {
         const distRayToGalaxy = ray.distanceToPoint(galaxy.worldPosition);
         if (distRayToGalaxy < galaxy.boundingRadius * 0.9) {
-          // Clicked on distant galaxy: initiate flight towards it!
           this.navigateToGalaxy(id);
           return;
         }
       }
     }
 
-    // Otherwise, generate localized energy wave on the active galaxy plane
+    // Local energy wave pulse
     const hitPoint = new THREE.Vector3();
     const activeGalaxy = this.getActiveGalaxy();
 
@@ -394,9 +394,6 @@ export class GalaxyEngine {
     }
   }
 
-  /**
-   * Phase 5: Double-Click Core Inspection or Galaxy Selection
-   */
   private handleDoubleActionAtScreen(clientX: number, clientY: number) {
     if (this.isInspectingCore) {
       this.exitCoreInspection();
@@ -409,7 +406,6 @@ export class GalaxyEngine {
     this.raycaster.setFromCamera(new THREE.Vector2(normX, normY), this.camera);
     const ray = this.raycaster.ray;
 
-    // Check if double-clicked another galaxy
     for (const [id, galaxy] of this.galaxies.entries()) {
       if (id !== this.activeGalaxyId) {
         const distRayToGalaxy = ray.distanceToPoint(galaxy.worldPosition);
@@ -420,7 +416,6 @@ export class GalaxyEngine {
       }
     }
 
-    // Check if double-clicked active galaxy core
     const activeGalaxy = this.getActiveGalaxy();
     if (!activeGalaxy) return;
 
@@ -429,12 +424,12 @@ export class GalaxyEngine {
     let hitCore = false;
 
     if (ray.intersectPlane(this.interactionPlane, planeHit)) {
-      if (planeHit.distanceTo(activeGalaxy.worldPosition) < 7.5) {
+      if (planeHit.distanceTo(activeGalaxy.worldPosition) < 8.0) {
         hitCore = true;
       }
     }
 
-    if (distToActiveCore < 6.5 || hitCore) {
+    if (distToActiveCore < 7.0 || hitCore) {
       this.enterCoreInspection();
     }
   }
@@ -447,7 +442,9 @@ export class GalaxyEngine {
     this.targetCoreInspection = 1.0;
     this.setState('CORE_TRANSITION');
 
-    const targetPos = new THREE.Vector3().copy(active.worldPosition).add(this.coreInspectOffset);
+    // Use Black Hole Inspection Offset if active galaxy has a supermassive black hole
+    const offset = active.config.hasBlackHole ? this.blackHoleInspectOffset : this.coreInspectOffset;
+    const targetPos = new THREE.Vector3().copy(active.worldPosition).add(offset);
     const targetLook = new THREE.Vector3().copy(active.worldPosition);
 
     this.startCameraTransition(targetPos, targetLook, 1.2);
@@ -612,7 +609,6 @@ export class GalaxyEngine {
       this.camTransitionProgress += delta / this.camTransitionDuration;
       const t = Math.min(this.camTransitionProgress, 1.0);
       
-      // Smooth cubic ease-out curve
       const ease = 1.0 - Math.pow(1.0 - t, 3.0);
 
       this.camera.position.lerpVectors(this.camTransitionStartPos, this.camTransitionTargetPos, ease);
@@ -625,14 +621,32 @@ export class GalaxyEngine {
       }
     }
 
-    // 6. Update OrbitControls
+    // 6. Camera Gravitational Attraction & Safety Boundary Near Black Hole
+    const activeGalaxy = this.getActiveGalaxy();
+    if (activeGalaxy && activeGalaxy.config.hasBlackHole && !this.isTransitioningCamera) {
+      const distToBH = this.camera.position.distanceTo(activeGalaxy.worldPosition);
+      
+      // Subtle gravitational attraction within 24 AU
+      if (distToBH < 24.0 && distToBH > this.blackHoleSafetyRadius) {
+        const pullDir = new THREE.Vector3().subVectors(activeGalaxy.worldPosition, this.camera.position).normalize();
+        const gravityStrength = (1.0 - (distToBH / 24.0)) * 0.015;
+        this.camera.position.addScaledVector(pullDir, gravityStrength);
+      }
+
+      // Safety boundary clamp to prevent camera clipping inside event horizon
+      if (distToBH < this.blackHoleSafetyRadius) {
+        const pushDir = new THREE.Vector3().subVectors(this.camera.position, activeGalaxy.worldPosition).normalize();
+        this.camera.position.copy(activeGalaxy.worldPosition).addScaledVector(pushDir, this.blackHoleSafetyRadius);
+      }
+    }
+
+    // 7. Update OrbitControls
     this.controls.update();
 
-    // 7. Update Scale-Aware LOD and Simulation for all Galaxies
+    // 8. Update Scale-Aware LOD and Simulation for all Galaxies
     const effectiveTime = this.prefersReducedMotion ? elapsedTime * 0.2 : elapsedTime;
 
     this.galaxies.forEach((galaxyInstance, id) => {
-      // Update distance LOD relative to current camera position
       galaxyInstance.updateLOD(this.camera.position);
 
       const isActive = id === this.activeGalaxyId;
@@ -648,19 +662,41 @@ export class GalaxyEngine {
       );
     });
 
-    // 8. Update Environment Subsystems
+    // 9. Update Environment Subsystems
     this.nebula.update(effectiveTime, this.entranceProgress);
     this.starfield.update(effectiveTime, this.entranceProgress);
     this.foregroundDust.update(effectiveTime, this.entranceProgress);
 
-    // 9. Render Post-Processing Pipeline
+    // 10. Update Relativistic Gravitational Lensing in Post-Processing
+    if (activeGalaxy && activeGalaxy.config.hasBlackHole && activeGalaxy.config.blackHoleConfig) {
+      const distToBH = this.camera.position.distanceTo(activeGalaxy.worldPosition);
+      
+      // Check if black hole is in front of camera
+      this.projectedScreenPos.copy(activeGalaxy.worldPosition).project(this.camera);
+      const isVisible = this.projectedScreenPos.z < 1.0;
+
+      if (isVisible && distToBH < 65.0) {
+        this.screenLensPos.set(
+          (this.projectedScreenPos.x + 1.0) * 0.5,
+          (this.projectedScreenPos.y + 1.0) * 0.5
+        );
+        const lensRadius = (activeGalaxy.config.blackHoleConfig.lensingStrength / Math.max(distToBH, 3.0)) * 0.18;
+        this.postProcessing.updateLensing(true, this.screenLensPos, lensRadius);
+      } else {
+        this.postProcessing.updateLensing(false, this.screenLensPos, 0.0);
+      }
+    } else {
+      this.postProcessing.updateLensing(false, this.screenLensPos, 0.0);
+    }
+
+    // 11. Render Post-Processing Pipeline
     if (this.postProcessing.isEnabled()) {
       this.postProcessing.render();
     } else {
       this.renderer.render(this.scene, this.camera);
     }
 
-    // 10. FPS Telemetry Calculation
+    // 12. FPS Telemetry Calculation
     this.frameCount++;
     const now = performance.now();
     if (now - this.lastFpsUpdate >= 500) {
@@ -669,7 +705,6 @@ export class GalaxyEngine {
       this.lastFpsUpdate = now;
 
       if (this.statsCallback) {
-        const activeGalaxy = this.getActiveGalaxy();
         const camDist = activeGalaxy
           ? Math.round(this.camera.position.distanceTo(activeGalaxy.worldPosition))
           : Math.round(this.camera.position.length());
