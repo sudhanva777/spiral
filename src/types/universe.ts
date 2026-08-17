@@ -14,7 +14,15 @@ export interface GalaxyPalette {
 }
 
 export interface GalaxyMorphology {
-  type: 'barred-spiral' | 'flocculent-ring' | 'grand-design' | 'elliptical';
+  type:
+    | 'barred-spiral'
+    | 'flocculent-ring'
+    | 'emerald-multi-arm'
+    | 'golden-dark-barred'
+    | 'turbulent-crimson'
+    | 'massive-energy-spiral'
+    | 'grand-design'
+    | 'elliptical';
   armCount: number;
   asymmetry: number;
   barStrength: number;
@@ -25,6 +33,8 @@ export interface GalaxyMorphology {
   verticalThickness?: number;
   starFormationDensity?: number;
   spiralTightness: number;
+  darkLaneStrength?: number;
+  voidStrength?: number;
 }
 
 export interface GalaxyConfig {
@@ -38,6 +48,8 @@ export interface GalaxyConfig {
   scale: number;
   speed: number;
   turbulence: number;
+  boundingRadius?: number;
+  specialEffect?: 'energy-jets' | null;
   palette: GalaxyPalette;
   morphology: GalaxyMorphology;
 }

@@ -511,6 +511,14 @@ export class GalaxyEngine {
       this.navigateToGalaxy('galaxy01');
     } else if (e.key === '2') {
       this.navigateToGalaxy('galaxy02');
+    } else if (e.key === '3') {
+      this.navigateToGalaxy('galaxy03');
+    } else if (e.key === '4') {
+      this.navigateToGalaxy('galaxy04');
+    } else if (e.key === '5') {
+      this.navigateToGalaxy('galaxy05');
+    } else if (e.key === '6') {
+      this.navigateToGalaxy('galaxy06');
     }
   }
 

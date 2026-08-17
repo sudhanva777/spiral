@@ -269,27 +269,36 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           </div>
           <div className="modal-body">
             <p>
-              <strong>Continuous 3D Universe:</strong> Multiple unique procedural galaxies co-existing in the same seamless Three.js coordinate space with real-time scale-aware distance LOD.
+              <strong>Continuous 3D Universe:</strong> Six unique procedural galaxies co-existing in one seamless Three.js coordinate space with real-time scale-aware distance LOD.
             </p>
             <p>
-              <strong>Galaxy 01 (Aether Prime):</strong> Barred spiral morphology with electric cyan/ice-blue relativistic streams, warm amber arms, and emerald outer dust.
+              <strong>01 Aether Prime:</strong> Grand-design barred spiral — cyan/ice-blue streams, emerald outer dust.
             </p>
             <p>
-              <strong>Galaxy 02 (Ignis Vesper):</strong> Asymmetric flocculent ring morphology with warm golden nucleus (#FFF4D6), vivid magenta/violet plasma arms, and deep burgundy cosmic dust (#7F1D1D).
+              <strong>02 Ignis Vesper:</strong> Asymmetric flocculent ring — golden core, magenta/violet arms.
             </p>
             <p>
-              <strong>Scale-Aware Distance LOD:</strong> Distant celestial objects dynamically optimize particle size and density, locking performance at 60 FPS.
+              <strong>03 Verdant:</strong> Deep emerald multi-arm spiral — lime starburst knots, layered green dust.
+            </p>
+            <p>
+              <strong>04 Eclipse:</strong> Golden-dark barred spiral — elongated bar, high-contrast amber/black dust voids.
+            </p>
+            <p>
+              <strong>05 Red Veil:</strong> Turbulent crimson galaxy — violent star-forming regions, fragmented arms.
+            </p>
+            <p>
+              <strong>06 Aetheris:</strong> Massive 4-arm celestial forge — dual opposing relativistic energy jets, largest galaxy in the universe.
             </p>
             <div className="modal-interaction-guide">
               <h4>Universe Navigation & Controls</h4>
               <ul>
-                <li><span>Pill [01] / [02]</span> Travel to Galaxy 01 / Galaxy 02</li>
-                <li><span>Keys 1 / 2</span> Quick shortcut to fly to Galaxy 01 / 02</li>
+                <li><span>Pills [01–06]</span> Travel to any galaxy</li>
+                <li><span>Keys 1–6</span> Quick shortcut to fly to a galaxy</li>
                 <li><span>Left-Click Drag</span> 360° Orbit around active galaxy</li>
                 <li><span>Right-Click Drag</span> Pan camera across deep space</li>
                 <li><span>Scroll / Pinch</span> Continuous zoom (3.5 to 500 AU)</li>
                 <li><span>Click Galaxy</span> Propagating energy wave pulse</li>
-                <li><span>Double-Click Core</span> Toggle close Core Inspection mode (or C key)</li>
+                <li><span>Double-Click Core</span> Toggle Core Inspection (or C key)</li>
                 <li><span>R Key / Reset</span> Return to active galaxy default view</li>
               </ul>
             </div>
@@ -302,7 +311,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
         {/* Interaction Hint Badge */}
         <div className="interaction-hint pointer-events-auto">
           <div className="pulse-dot" />
-          <span>DRAG — ORBIT • SCROLL — ZOOM • CLICK [01 / 02] — TRAVEL DEEP SPACE • DBL-CLICK CORE — INSPECT • R — RESET</span>
+          <span>DRAG — ORBIT • SCROLL — ZOOM • KEYS 1–6 — TRAVEL BETWEEN GALAXIES • DBL-CLICK CORE — INSPECT • R — RESET</span>
         </div>
 
         {/* Floating Preset Selector Drawer */}

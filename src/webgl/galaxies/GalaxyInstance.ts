@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GalaxyParticles } from '../particles/GalaxyParticles';
+import { EnergyJetSystem } from './effects/EnergyJetSystem';
 import type { GalaxyConfig } from '../../types/universe';
 import type { GalaxyPreset } from '../../types/simulation';
 
@@ -7,6 +8,7 @@ export class GalaxyInstance {
   public config: GalaxyConfig;
   public group: THREE.Group;
   public particles: GalaxyParticles;
+  public energyJets?: EnergyJetSystem;
   public worldPosition: THREE.Vector3;
   public boundingRadius = 45.0;
   public currentDistanceToCamera = 0;
@@ -23,9 +25,19 @@ export class GalaxyInstance {
     this.group.position.copy(this.worldPosition);
     this.group.rotation.set(...config.rotation);
     this.group.scale.setScalar(config.scale);
+    this.boundingRadius = (config.boundingRadius || 45.0) * config.scale;
 
-    this.particles = new GalaxyParticles(particleCount, config);
+    // Scale particle density for centerpiece galaxy (Galaxy 06 has 1.25x density allocation)
+    const count = config.id === 'galaxy06' ? Math.round(particleCount * 1.25) : particleCount;
+    this.particles = new GalaxyParticles(count, config);
     this.group.add(this.particles.points);
+
+    // Optional modular special effect (e.g. Relativistic Energy Jets for Galaxy 06)
+    if (config.specialEffect === 'energy-jets') {
+      const jetParticles = Math.min(Math.round(particleCount * 0.04), 4500);
+      this.energyJets = new EnergyJetSystem(jetParticles);
+      this.group.add(this.energyJets.points);
+    }
   }
 
   public update(
@@ -58,6 +70,10 @@ export class GalaxyInstance {
       pulseStrength,
       coreInspection
     );
+
+    if (this.energyJets) {
+      this.energyJets.update(time, this.currentLOD);
+    }
   }
 
   public updateLOD(cameraPosition: THREE.Vector3) {
@@ -80,6 +96,9 @@ export class GalaxyInstance {
 
   public setPixelRatio(dpr: number) {
     this.particles.setPixelRatio(dpr);
+    if (this.energyJets) {
+      this.energyJets.setPixelRatio(dpr);
+    }
   }
 
   public applyPreset(preset: GalaxyPreset) {
@@ -87,11 +106,15 @@ export class GalaxyInstance {
   }
 
   public rebuild(count: number) {
-    this.particles.rebuild(count, this.config);
+    const adjustedCount = this.config.id === 'galaxy06' ? Math.round(count * 1.25) : count;
+    this.particles.rebuild(adjustedCount, this.config);
   }
 
   public dispose() {
     this.particles.dispose();
+    if (this.energyJets) {
+      this.energyJets.dispose();
+    }
     this.group.clear();
   }
 }
