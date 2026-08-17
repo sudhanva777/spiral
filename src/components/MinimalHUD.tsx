@@ -13,11 +13,12 @@ import {
   ChevronDown,
   RotateCcw,
   Crosshair,
-  Globe2
+  Globe2,
+  Network
 } from 'lucide-react';
 import type { GalaxyPreset, InteractionState, QualityTier, SimulationStats } from '../types/simulation';
-import type { UniverseState } from '../types/universe';
-import { UNIVERSE_GALAXIES } from '../webgl/galaxies/registry';
+import type { UniverseState, GalaxyGroupId } from '../types/universe';
+import { UNIVERSE_GALAXIES, COSMIC_GROUPS, getGalaxyConfigById, getGroupForGalaxy } from '../webgl/galaxies/registry';
 import { soundSynthesizer } from './SoundSynthesizer';
 
 export const GALAXY_PRESETS: GalaxyPreset[] = [
@@ -109,7 +110,14 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
   stats,
   currentPreset,
   interactionState = 'EXPLORING',
-  universeState = { activeGalaxyId: 'galaxy01', isNavigating: false, distanceToActive: 44 },
+  universeState = {
+    activeGalaxyId: 'galaxy01',
+    activeGroupId: 'groupA',
+    isNavigating: false,
+    distanceToActive: 44,
+    scaleTier: 'GALACTIC_DISK',
+    scaleLabel: '95,000 LIGHT-YEARS // GALACTIC DISK',
+  },
   onSelectPreset,
   onSelectQuality,
   onResetCamera,
@@ -120,9 +128,11 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isControlsExpanded, setIsControlsExpanded] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const [selectedGroupFilter, setSelectedGroupFilter] = useState<'ALL' | GalaxyGroupId>('ALL');
 
   const isCoreInspecting = interactionState === 'CORE_INSPECTION' || interactionState === 'CORE_TRANSITION';
-  const activeGalaxy = UNIVERSE_GALAXIES.find((g) => g.id === universeState.activeGalaxyId) || UNIVERSE_GALAXIES[0];
+  const activeGalaxy = getGalaxyConfigById(universeState.activeGalaxyId);
+  const activeGroup = getGroupForGalaxy(universeState.activeGalaxyId);
 
   const handleToggleAudio = () => {
     const playing = soundSynthesizer.toggle();
@@ -139,6 +149,11 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
     }
   };
 
+  const filteredGalaxies =
+    selectedGroupFilter === 'ALL'
+      ? UNIVERSE_GALAXIES
+      : UNIVERSE_GALAXIES.filter((g) => g.groupId === selectedGroupFilter);
+
   return (
     <div className="hud-overlay pointer-events-none select-none">
       {/* Top Header Bar */}
@@ -149,30 +164,43 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
             <span className="brand-ring" />
           </div>
           <div className="brand-text">
-            <h1 className="brand-title">A E T H E R // U N I V E R S E</h1>
+            <h1 className="brand-title">A E T H E R // C O S M I C &nbsp; W E B</h1>
             <span className="brand-sub">
-              {activeGalaxy.name.toUpperCase()} • {activeGalaxy.hasBlackHole ? 'SUPERMASSIVE SINGULARITY' : 'KEPLERIAN CORE'} • CONTINUOUS 3D ENGINE
+              {activeGroup.name.toUpperCase()} &bull; {activeGalaxy.name.toUpperCase()} &bull; {universeState.scaleLabel}
             </span>
           </div>
         </div>
 
-        {/* Universe Celestial Navigator / Breadcrumbs */}
-        <div className="universe-selector-bar pointer-events-auto">
-          {UNIVERSE_GALAXIES.map((galaxy, idx) => {
-            const isActive = galaxy.id === universeState.activeGalaxyId;
-            return (
-              <button
-                key={galaxy.id}
-                onClick={() => onSelectGalaxy && onSelectGalaxy(galaxy.id)}
-                className={`galaxy-nav-pill ${isActive ? 'active' : ''}`}
-                title={`Travel to ${galaxy.name} (${idx + 1})`}
-              >
-                <Globe2 className={`w-3.5 h-3.5 mr-1.5 ${isActive ? 'text-pink-400' : 'text-slate-400'}`} />
-                <span className="galaxy-nav-num">0{idx + 1}</span>
-                <span className="galaxy-nav-name">{galaxy.name}</span>
-              </button>
-            );
-          })}
+        {/* Dynamic Scale & Breadcrumb Bar */}
+        <div className="universe-breadcrumb-bar pointer-events-auto">
+          <button
+            onClick={() => onResetCamera && onResetCamera()}
+            className="breadcrumb-node"
+            title="Cosmic Web Overview"
+          >
+            <Network className="w-3.5 h-3.5 mr-1 text-cyan-400" />
+            <span>COSMIC WEB</span>
+          </button>
+          <span className="breadcrumb-separator">&gt;</span>
+          <button
+            onClick={() => setSelectedGroupFilter(activeGroup.id)}
+            className="breadcrumb-node active-group"
+            title={`Focus ${activeGroup.name}`}
+          >
+            <span>{activeGroup.name.toUpperCase()}</span>
+          </button>
+          <span className="breadcrumb-separator">&gt;</span>
+          <span className="breadcrumb-leaf">
+            {activeGalaxy.name.toUpperCase()}
+          </span>
+          {isCoreInspecting && (
+            <>
+              <span className="breadcrumb-separator">&gt;</span>
+              <span className="breadcrumb-singularity animate-pulse">
+                {activeGalaxy.hasBlackHole ? 'SINGULARITY' : 'CORE'}
+              </span>
+            </>
+          )}
         </div>
 
         {/* Telemetry Chips */}
@@ -264,43 +292,80 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
         </div>
       </header>
 
+      {/* Cosmic Group Tabs & Galaxy Navigator */}
+      <nav className="cosmic-navigator-bar pointer-events-auto">
+        <div className="group-filter-tabs">
+          <button
+            onClick={() => setSelectedGroupFilter('ALL')}
+            className={`group-tab ${selectedGroupFilter === 'ALL' ? 'active' : ''}`}
+          >
+            ALL GALAXIES (16)
+          </button>
+          {COSMIC_GROUPS.map((grp) => (
+            <button
+              key={grp.id}
+              onClick={() => setSelectedGroupFilter(grp.id)}
+              className={`group-tab ${selectedGroupFilter === grp.id ? 'active' : ''}`}
+            >
+              {grp.name.toUpperCase()}
+            </button>
+          ))}
+        </div>
+
+        <div className="galaxy-pills-scroll">
+          {filteredGalaxies.map((galaxy) => {
+            const idx = UNIVERSE_GALAXIES.findIndex((g) => g.id === galaxy.id);
+            const isActive = galaxy.id === universeState.activeGalaxyId;
+            return (
+              <button
+                key={galaxy.id}
+                onClick={() => onSelectGalaxy && onSelectGalaxy(galaxy.id)}
+                className={`galaxy-nav-pill ${isActive ? 'active' : ''}`}
+                title={`Travel to ${galaxy.name} (${idx + 1})`}
+              >
+                <Globe2 className={`w-3.5 h-3.5 mr-1.5 ${isActive ? 'text-pink-400' : 'text-slate-400'}`} />
+                <span className="galaxy-nav-num">{(idx + 1).toString().padStart(2, '0')}</span>
+                <span className="galaxy-nav-name">{galaxy.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
       {/* Info Modal / Drawer */}
       {showInfo && (
         <div className="hud-info-modal pointer-events-auto">
           <div className="modal-header">
-            <h3>AETHER Universe Architecture</h3>
+            <h3>AETHER Cosmic Web V4 Architecture</h3>
             <button onClick={() => setShowInfo(false)} className="close-btn">×</button>
           </div>
           <div className="modal-body">
             <p>
-              <strong>Continuous 3D Universe:</strong> Six unique procedural galaxies co-existing in one seamless Three.js coordinate space with real-time scale-aware distance LOD.
+              <strong>Hierarchical Cosmic Web:</strong> 16 unique procedural galaxies arranged into 4 cosmic groups, interconnected by multi-branch cosmic filaments and separated by vast empty cosmic voids.
             </p>
             <p>
-              <strong>01 Aether Prime:</strong> Grand-design barred spiral — cyan/ice-blue streams, emerald outer dust.
+              <strong>Group Alpha (Local Cluster):</strong> Galaxies 01 Aether Prime, 03 Verdant, 07 Aethelgard, 10 Chrono Forge.
             </p>
             <p>
-              <strong>02 Ignis Vesper:</strong> Asymmetric flocculent ring — golden core, magenta/violet arms.
+              <strong>Group Beta (Southern Stream):</strong> Galaxies 02 Ignis Vesper, 05 Red Veil, 08 Aquila, 13 Solaris.
             </p>
             <p>
-              <strong>03 Verdant:</strong> Deep emerald multi-arm spiral — lime starburst knots, layered green dust.
+              <strong>Group Gamma (Abyssal Ridge):</strong> Galaxies 04 Eclipse, 09 Siren, 12 Viridis, 15 Nether.
             </p>
             <p>
-              <strong>04 Eclipse:</strong> Golden-dark barred spiral — elongated bar, high-contrast amber/black dust voids.
+              <strong>Group Delta (Celestial Forges):</strong> Galaxies 06 Aetheris (Centerpiece), 11 Celestia, 14 Glacies, 16 Aurelia.
             </p>
             <p>
-              <strong>05 Red Veil:</strong> Turbulent crimson galaxy — violent star-forming regions, fragmented arms.
-            </p>
-            <p>
-              <strong>06 Aetheris:</strong> Massive 4-arm celestial forge — dual opposing relativistic energy jets, largest galaxy in the universe.
+              <strong>Living Supermassive Black Holes:</strong> Differential accretion disks, photon rings, and real-time optical gravitational lensing.
             </p>
             <div className="modal-interaction-guide">
               <h4>Universe Navigation & Controls</h4>
               <ul>
-                <li><span>Pills [01–06]</span> Travel to any galaxy</li>
-                <li><span>Keys 1–6</span> Quick shortcut to fly to a galaxy</li>
+                <li><span>Pills [01–16]</span> Travel to any galaxy across the universe</li>
+                <li><span>Keys 1–9 & 0</span> Quick shortcuts to first 10 galaxies</li>
                 <li><span>Left-Click Drag</span> 360° Orbit around active galaxy</li>
                 <li><span>Right-Click Drag</span> Pan camera across deep space</li>
-                <li><span>Scroll / Pinch</span> Continuous zoom (3.5 to 500 AU)</li>
+                <li><span>Scroll / Pinch</span> Continuous zoom (2.8 to 650 AU)</li>
                 <li><span>Click Galaxy</span> Propagating energy wave pulse</li>
                 <li><span>Double-Click Core</span> Toggle Core Inspection (or C key)</li>
                 <li><span>R Key / Reset</span> Return to active galaxy default view</li>
@@ -312,13 +377,11 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
 
       {/* Bottom Preset Switcher & Controls */}
       <footer className="hud-footer">
-        {/* Interaction Hint Badge */}
         <div className="interaction-hint pointer-events-auto">
           <div className="pulse-dot" />
-          <span>DRAG — ORBIT • SCROLL — ZOOM • KEYS 1–6 — TRAVEL BETWEEN GALAXIES • DBL-CLICK CORE — INSPECT • R — RESET</span>
+          <span>DRAG — ORBIT • SCROLL — ZOOM • PILLS [01–16] — TRAVEL COSMIC WEB • DBL-CLICK CORE — SINGULARITY • R — RESET</span>
         </div>
 
-        {/* Floating Preset Selector Drawer */}
         <div className="preset-bar pointer-events-auto">
           <div className="preset-tabs">
             {GALAXY_PRESETS.map((preset) => {
@@ -361,7 +424,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
                   >
                     <span className="tier-label uppercase">{tier}</span>
                     <span className="tier-count">
-                      {tier === 'ultra' ? '300K' : tier === 'high' ? '180K' : tier === 'medium' ? '100K' : '50K'} pts
+                      {tier === 'ultra' ? '750K+' : tier === 'high' ? '500K' : tier === 'medium' ? '250K' : '100K'} pts
                     </span>
                   </button>
                 ))}

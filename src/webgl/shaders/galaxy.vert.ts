@@ -13,6 +13,7 @@ attribute float aBranch;     // Arm / branch index
 attribute float aDistance;   // Normalized distance from center (0.0 to 1.0)
 attribute float aLayer;      // 0 = core, 1 = inner arm/ring, 2 = outer arm, 3 = energy stream/nursery, 4 = dust
 attribute float aCoreType;   // -1 = non-core, 0 = micro dust, 1 = small luminous, 2 = filament, 3 = energy knot
+attribute float aLuminosity; // Population luminosity hierarchy (0.35 = micro dust, 1.0 = normal, 4.5+ = supergiant)
 attribute vec3 aInitialPos;
 
 // Uniforms
@@ -44,6 +45,7 @@ varying float vNoise;
 varying float vDepth;
 varying float vLayer;
 varying float vCoreType;
+varying float vLuminosity;
 varying float vAngular;          // Angular position for filament/gap patterns
 varying float vPulseFactor;      // Luminous wavefront flash intensity
 varying float vCoreInspection;   // LOD factor for fragment shader
@@ -51,14 +53,12 @@ varying float vCoreInspection;   // LOD factor for fragment shader
 void main() {
   vec3 pos = aInitialPos;
   float dist = length(pos.xz);
-  float normDist = clamp(dist / 40.0, 0.0, 1.0);
+  float normDist = clamp(dist / 42.0, 0.0, 1.0);
   
   // 1. Galactic Differential Rotation
-  // Closer particles orbit slightly faster (realistic accretion/galaxy velocity curve)
   float orbitalVelocity = uSpeed * (1.8 / (sqrt(dist * 0.4 + 1.2) + 0.3));
   float currentAngle = uTime * orbitalVelocity;
   
-  // Apply 2D rotation matrix in XZ plane
   float cosA = cos(currentAngle);
   float sinA = sin(currentAngle);
   mat2 rot = mat2(cosA, -sinA, sinA, cosA);
@@ -68,12 +68,11 @@ void main() {
   vec3 noiseCoord = vec3(pos.xz * 0.08, uTime * 0.12 + aPhase);
   vec3 curl = curlNoise(noiseCoord) * (1.5 + normDist * 3.0) * uTurbulence;
   
-  // Vertical oscillation & breathing
   float verticalWave = sin(uTime * 0.4 + dist * 0.5 + aPhase * 6.28) * (0.3 + normDist * 0.8);
   pos.y += verticalWave + curl.y * 1.2;
   pos.xz += curl.xz * (0.8 + normDist * 0.5);
 
-  // 3. Interactive Gravitational Lensing & Relativistic Frame Dragging (in local space)
+  // 3. Interactive Gravitational Lensing & Relativistic Frame Dragging
   vec3 diffToMouse = uMousePos3D - pos;
   float distToMouse = length(diffToMouse);
   if (distToMouse > 0.001) {
@@ -106,55 +105,50 @@ void main() {
   // 7. Base Color from configuration attribute + subtle noise pulses
   vec3 col = aColor;
   float nVal = snoise(vec3(pos.xz * 0.05, uTime * 0.08));
-  col += vec3(max(0.0, nVal)) * 0.18;
+  col += vec3(max(0.0, nVal)) * 0.16;
 
   vColor = col;
 
-  // Alpha computation with core brightness boost and dust attenuation
-  vAlpha = (0.35 + aRandomness * 0.65) * entranceDelay;
+  // Alpha computation scaled by particle population luminosity
+  float lumFactor = clamp(aLuminosity, 0.3, 3.0);
+  vAlpha = (0.35 + aRandomness * 0.65) * entranceDelay * (0.65 + lumFactor * 0.35);
+  
   if (aLayer == 0.0) {
     float coreNorm = clamp(dist / 5.5, 0.0, 1.0);
-    float coreBrightBoost = 1.0 + 0.25 * (1.0 - coreNorm);
-    if (aCoreType == 3.0) coreBrightBoost += 0.3;
-    if (aCoreType == 2.0) coreBrightBoost += 0.1;
+    float coreBrightBoost = 1.0 + 0.35 * (1.0 - coreNorm);
+    if (aCoreType == 3.0) coreBrightBoost += 0.4;
     vAlpha *= coreBrightBoost;
   }
-  if (aLayer == 4.0) vAlpha *= 0.45;
+  if (aLayer == 4.0) vAlpha *= 0.50;
 
   vDistance = normDist;
   vBranch = aBranch;
   vNoise = nVal;
   vLayer = aLayer;
   vCoreType = aCoreType;
+  vLuminosity = aLuminosity;
   vAngular = angularPos;
   vPulseFactor = pulseWaveFactor;
   vCoreInspection = uCoreInspection;
 
-  // View Transformation & Size Attenuation
+  // View Transformation & Hierarchical Size Attenuation
   vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
   vDepth = -mvPosition.z;
 
   float baseSize = aSize * aScale * uSizeMultiplier;
+  
+  // Apply Luminosity Hierarchy to Point Size (dim micro-particles stay compact, bright stars expand)
+  baseSize *= clamp(aLuminosity * 0.65 + 0.35, 0.4, 2.8);
 
   if (aLayer == 0.0) {
     float coreNorm = clamp(dist / 5.5, 0.0, 1.0);
-    float coreSizeMod = 0.6 + coreNorm * 0.6;
-    if (aCoreType == 0.0) coreSizeMod *= 0.8;
-    if (aCoreType == 2.0) coreSizeMod *= 0.85;
-    if (aCoreType == 3.0) coreSizeMod *= 1.1;
-
+    float coreSizeMod = 0.65 + coreNorm * 0.55;
     float inspectionSizeMod = mix(1.0, 0.75, uCoreInspection);
-    coreSizeMod *= inspectionSizeMod;
-    baseSize *= coreSizeMod;
+    baseSize *= coreSizeMod * inspectionSizeMod;
   }
-  if (aLayer == 4.0) baseSize *= 0.7;
+  if (aLayer == 4.0) baseSize *= 0.75;
 
-  if (aLayer == 0.0) {
-    float depthBias = clamp(1.0 + pos.y * 0.04, 0.85, 1.15);
-    baseSize *= depthBias;
-  }
-
-  // Physical Depth-based sizing curve
+  // Depth-based sizing curve
   float depthSizeMod = clamp(1.0 + (35.0 - vDepth) * 0.007, 0.75, 1.30);
   baseSize *= depthSizeMod;
 
@@ -162,8 +156,8 @@ void main() {
   baseSize *= mix(0.75, 1.0, uLODFactor);
 
   // Perspective point size attenuation
-  gl_PointSize = baseSize * (160.0 / -mvPosition.z) * uPixelRatio;
-  gl_PointSize = clamp(gl_PointSize, 1.0, 120.0 * uPixelRatio);
+  gl_PointSize = baseSize * (165.0 / -mvPosition.z) * uPixelRatio;
+  gl_PointSize = clamp(gl_PointSize, 1.0, 130.0 * uPixelRatio);
 
   gl_Position = projectionMatrix * mvPosition;
 }

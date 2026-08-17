@@ -5,6 +5,30 @@ import { BlackHoleSystem } from './effects/BlackHoleSystem';
 import type { GalaxyConfig } from '../../types/universe';
 import type { GalaxyPreset } from '../../types/simulation';
 
+function getParticleCountForGalaxy(config: GalaxyConfig, totalUniverseParticles: number): number {
+  switch (config.id) {
+    case 'galaxy06':
+      // Galaxy 06 (Aetheris): Monumental centerpiece with highest particle density
+      return Math.round(totalUniverseParticles * 0.26);
+    case 'galaxy05':
+      // Galaxy 05 (Red Veil): Dense energetic starburst galaxy
+      return Math.round(totalUniverseParticles * 0.18);
+    case 'galaxy04':
+      // Galaxy 04 (Eclipse): High-contrast dense golden storm
+      return Math.round(totalUniverseParticles * 0.18);
+    case 'galaxy03':
+      // Galaxy 03 (Verdant): Deep multi-layered emerald ecosystem
+      return Math.round(totalUniverseParticles * 0.18);
+    case 'galaxy02':
+      // Galaxy 02 (Ignis Vesper): Flocculent ring
+      return Math.round(totalUniverseParticles * 0.14);
+    case 'galaxy01':
+    default:
+      // Galaxy 01 (Aether Prime): Baseline reference quality preserved
+      return Math.round(totalUniverseParticles * 0.14);
+  }
+}
+
 export class GalaxyInstance {
   public config: GalaxyConfig;
   public group: THREE.Group;
@@ -20,7 +44,7 @@ export class GalaxyInstance {
   private localMouse3D = new THREE.Vector3();
   private localPulseOrigin = new THREE.Vector3();
 
-  constructor(config: GalaxyConfig, particleCount: number) {
+  constructor(config: GalaxyConfig, totalUniverseParticles: number) {
     this.config = config;
     this.group = new THREE.Group();
     this.worldPosition = new THREE.Vector3(...config.position);
@@ -29,21 +53,21 @@ export class GalaxyInstance {
     this.group.scale.setScalar(config.scale);
     this.boundingRadius = (config.boundingRadius || 45.0) * config.scale;
 
-    // Scale particle density for centerpiece galaxy (Galaxy 06 has 1.25x density allocation)
-    const count = config.id === 'galaxy06' ? Math.round(particleCount * 1.25) : particleCount;
+    // Allocated particle density for this specific galaxy
+    const count = getParticleCountForGalaxy(config, totalUniverseParticles);
     this.particles = new GalaxyParticles(count, config);
     this.group.add(this.particles.points);
 
     // Modular Living Supermassive Black Hole System (Galaxies 02-06)
     if (config.hasBlackHole && config.blackHoleConfig) {
-      const bhParticles = Math.min(Math.round(particleCount * 0.05), 5000);
+      const bhParticles = Math.min(Math.round(count * 0.055), 6500);
       this.blackHole = new BlackHoleSystem(config.blackHoleConfig, bhParticles);
       this.group.add(this.blackHole.group);
     }
 
     // Modular special effect (e.g. Relativistic Energy Jets for Galaxy 06)
     if (config.specialEffect === 'energy-jets') {
-      const jetParticles = Math.min(Math.round(particleCount * 0.04), 4500);
+      const jetParticles = Math.min(Math.round(count * 0.045), 6000);
       this.energyJets = new EnergyJetSystem(jetParticles);
       this.group.add(this.energyJets.points);
     }
@@ -81,7 +105,6 @@ export class GalaxyInstance {
     );
 
     if (this.blackHole) {
-      // Dynamic Black Hole LOD: reveal accretion disk and photon ring progressively as camera nears
       const bhLOD = this.currentDistanceToCamera < 45.0 ? 1.0 : this.currentLOD;
       this.blackHole.update(time, bhLOD);
     }
@@ -95,9 +118,6 @@ export class GalaxyInstance {
     this.currentDistanceToCamera = this.worldPosition.distanceTo(cameraPosition);
 
     // Dynamic Scale-Aware LOD curve
-    // Distance < 90 AU: Full LOD (1.0)
-    // Distance 90 - 280 AU: Smooth LOD transition (1.0 -> 0.4)
-    // Distance > 280 AU: Distant LOD (0.35)
     if (this.currentDistanceToCamera < 90) {
       this.currentLOD = 1.0;
     } else if (this.currentDistanceToCamera < 280) {
@@ -123,9 +143,9 @@ export class GalaxyInstance {
     this.particles.applyPreset(preset);
   }
 
-  public rebuild(count: number) {
-    const adjustedCount = this.config.id === 'galaxy06' ? Math.round(count * 1.25) : count;
-    this.particles.rebuild(adjustedCount, this.config);
+  public rebuild(totalUniverseParticles: number) {
+    const count = getParticleCountForGalaxy(this.config, totalUniverseParticles);
+    this.particles.rebuild(count, this.config);
   }
 
   public dispose() {

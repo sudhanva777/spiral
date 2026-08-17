@@ -29,6 +29,7 @@ export class GalaxyParticles {
     this.geometry.setAttribute('aDistance', new THREE.BufferAttribute(data.distances, 1));
     this.geometry.setAttribute('aLayer', new THREE.BufferAttribute(data.layers, 1));
     this.geometry.setAttribute('aCoreType', new THREE.BufferAttribute(data.coreTypes, 1));
+    this.geometry.setAttribute('aLuminosity', new THREE.BufferAttribute(data.luminosities, 1));
 
     this.material = new THREE.ShaderMaterial({
       vertexShader: galaxyVertexShader,
@@ -120,6 +121,7 @@ export class GalaxyParticles {
     this.geometry.setAttribute('aDistance', new THREE.BufferAttribute(data.distances, 1));
     this.geometry.setAttribute('aLayer', new THREE.BufferAttribute(data.layers, 1));
     this.geometry.setAttribute('aCoreType', new THREE.BufferAttribute(data.coreTypes, 1));
+    this.geometry.setAttribute('aLuminosity', new THREE.BufferAttribute(data.luminosities, 1));
 
     this.material.uniforms.uSpeed.value = config.speed;
     this.material.uniforms.uTurbulence.value = config.turbulence;

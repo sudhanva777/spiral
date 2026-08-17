@@ -35,6 +35,17 @@ export interface BlackHoleConfig {
   palette: BlackHolePalette;
 }
 
+export type GalaxyGroupId = 'groupA' | 'groupB' | 'groupC' | 'groupD';
+
+export interface GalaxyGroupInfo {
+  id: GalaxyGroupId;
+  name: string;
+  designation: string;
+  center: [number, number, number];
+  description: string;
+  galaxyIds: string[];
+}
+
 export interface GalaxyMorphology {
   type:
     | 'barred-spiral'
@@ -43,6 +54,12 @@ export interface GalaxyMorphology {
     | 'golden-dark-barred'
     | 'turbulent-crimson'
     | 'massive-energy-spiral'
+    | 'ring-spiral'
+    | 'flocculent-asymmetric'
+    | 'dense-elliptical'
+    | 'thin-spiral'
+    | 'asymmetric-broken'
+    | 'multi-arm-grand'
     | 'grand-design'
     | 'elliptical';
   armCount: number;
@@ -65,6 +82,7 @@ export interface GalaxyConfig {
   subtitle: string;
   description: string;
   type: string;
+  groupId: GalaxyGroupId;
   position: [number, number, number];
   rotation: [number, number, number];
   scale: number;
@@ -80,7 +98,10 @@ export interface GalaxyConfig {
 
 export interface UniverseState {
   activeGalaxyId: string;
+  activeGroupId: GalaxyGroupId;
   isNavigating: boolean;
   distanceToActive: number;
   activeBlackHole?: boolean;
+  scaleTier: 'COSMIC_WEB' | 'GALAXY_GROUP' | 'GALACTIC_DISK' | 'STELLAR_CORE' | 'SINGULARITY';
+  scaleLabel: string;
 }

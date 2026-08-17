@@ -1,4 +1,4 @@
-// Procedural Galaxy Generation Mathematics — Multi-Galaxy Volumetric 3D Universe Engine
+// Procedural Galaxy Generation Mathematics — Massive Multi-Density Universe Engine
 import type { GalaxyConfig } from '../../types/universe';
 import { GALAXY_01_CONFIG } from '../galaxies/registry';
 
@@ -13,6 +13,7 @@ export interface ParticleAttributes {
   distances: Float32Array;
   layers: Float32Array;
   coreTypes: Float32Array;
+  luminosities: Float32Array;
 }
 
 function randomGaussian(mean = 0, stdev = 1): number {
@@ -46,26 +47,55 @@ function mixRgb(c1: [number, number, number], c2: [number, number, number], t: n
 }
 
 /**
- * Multi-tier particle size generator:
- * 70% micro-dust, 20% small stars, 7% medium stars, 2.5% bright knots, 0.5% luminous supergiants
+ * Multi-tier particle population hierarchy generator:
+ * 70% micro-dust (dim, granular scale texture)
+ * 20% normal main-sequence stars
+ * 7% bright stars & stellar clusters
+ * 2% very bright star-forming knots
+ * 1% exceptionally luminous supergiants & core objects
  */
-function getHierarchicalParticleSize(): number {
+function getHierarchicalParticleProfile(): { size: number; luminosity: number; isCluster: boolean } {
   const rand = Math.random();
   if (rand < 0.70) {
-    return 0.45 + Math.random() * 0.35; // 70% Micro dust
+    // 70% Micro dust & fine background stars
+    return {
+      size: 0.35 + Math.random() * 0.35,
+      luminosity: 0.35 + Math.random() * 0.30,
+      isCluster: false,
+    };
   } else if (rand < 0.90) {
-    return 0.85 + Math.random() * 0.45; // 20% Small stars
+    // 20% Normal stars
+    return {
+      size: 0.85 + Math.random() * 0.45,
+      luminosity: 0.80 + Math.random() * 0.45,
+      isCluster: false,
+    };
   } else if (rand < 0.97) {
-    return 1.35 + Math.random() * 0.50; // 7% Medium stars
-  } else if (rand < 0.995) {
-    return 1.90 + Math.random() * 0.65; // 2.5% Bright stars / knots
+    // 7% Bright stars & dense clusters
+    return {
+      size: 1.45 + Math.random() * 0.65,
+      luminosity: 1.65 + Math.random() * 0.75,
+      isCluster: true,
+    };
+  } else if (rand < 0.99) {
+    // 2% Very bright star-forming knots
+    return {
+      size: 2.20 + Math.random() * 0.85,
+      luminosity: 2.80 + Math.random() * 1.10,
+      isCluster: true,
+    };
   } else {
-    return 2.65 + Math.random() * 0.85; // 0.5% Supergiants
+    // 1% Exceptionally luminous supergiants
+    return {
+      size: 3.20 + Math.random() * 1.20,
+      luminosity: 4.50 + Math.random() * 2.00,
+      isCluster: true,
+    };
   }
 }
 
 /**
- * Universal procedural galaxy generator supporting all 6 unique morphologies with genuine 3D volumetric thickness.
+ * Universal procedural galaxy generator producing rich, dense, volumetric galactic structures.
  */
 export function generateGalaxyParticles(
   count: number,
@@ -86,16 +116,17 @@ export function generateGalaxyParticles(
   const distances = new Float32Array(count);
   const layers = new Float32Array(count);
   const coreTypes = new Float32Array(count);
+  const luminosities = new Float32Array(count);
 
   const morphologyType = config.morphology.type;
   const numArms = config.morphology.armCount || 2;
   const spiralTightness = config.morphology.spiralTightness || 3.2;
   const isLarge = config.id === 'galaxy06';
-  const maxRadius = isLarge ? 52.0 : 38.0;
+  const maxRadius = isLarge ? 54.0 : 39.0;
   const vThicknessMult = config.morphology.verticalThickness || 1.0;
   const palette = config.palette;
 
-  // Pre-parse palette colors to linear RGB
+  // Linear RGB Palette
   const rgbCore = hexToRgb(palette.core);
   const rgbCoreHalo = hexToRgb(palette.coreHalo);
   const rgbInner = hexToRgb(palette.inner);
@@ -107,23 +138,39 @@ export function generateGalaxyParticles(
   const rgbDust2 = hexToRgb(palette.dustSecondary);
   const rgbStarForm = hexToRgb(palette.starFormation);
   const rgbStarFormWarm = hexToRgb(palette.starFormationWarm);
+  const rgbWhite = hexToRgb('#FFFFFF');
+
+  // Predefined Starburst Cluster Anchors per Galaxy (16-32 organic cluster centers along arms)
+  const clusterCount = isLarge ? 32 : 20;
+  const clusterAngles = new Float32Array(clusterCount);
+  const clusterRadii = new Float32Array(clusterCount);
+  for (let c = 0; c < clusterCount; c++) {
+    const cArm = c % numArms;
+    const cRad = 6.0 + Math.pow((c + 0.5) / clusterCount, 0.9) * (maxRadius * 0.85 - 6.0);
+    const cSpiral = Math.log(cRad * 0.35 + 1.0) * spiralTightness;
+    clusterRadii[c] = cRad;
+    clusterAngles[c] = (cArm * Math.PI * 2.0) / numArms + cSpiral + (hashNoise2D(c * 3.7, cRad * 1.3) - 0.5) * 0.35;
+  }
 
   for (let i = 0; i < count; i++) {
     const i3 = i * 3;
     const p = Math.random();
+    const profile = getHierarchicalParticleProfile();
+
     let layer = 1;
     let radius = 0;
     let branch = 0;
     let x = 0;
     let y = 0;
     let z = 0;
-    let size = getHierarchicalParticleSize();
+    let size = profile.size;
+    let luminosity = profile.luminosity;
     let coreType = -1.0;
     let col: [number, number, number] = rgbDeep;
 
     if (morphologyType === 'barred-spiral') {
       // =======================================================================
-      // GALAXY 01: BARRED-SPIRAL (Aether Prime — Reference Baseline Preserved)
+      // GALAXY 01: BARRED-SPIRAL (Aether Prime — Reference Baseline Quality)
       // =======================================================================
       if (p < 0.22) {
         layer = 0;
@@ -168,7 +215,6 @@ export function generateGalaxyParticles(
         x = Math.cos(totalAngle) * radius * 1.12;
         z = Math.sin(totalAngle) * radius * 0.88;
         y = randomGaussian(0, (0.4 + (radius / maxRadius) * 2.2) * 0.4 * vThicknessMult);
-        size = Math.max(size, 0.7);
 
         const normDist = Math.min(radius / maxRadius, 1.0);
         if (armIndex === 0) {
@@ -189,7 +235,6 @@ export function generateGalaxyParticles(
         x = Math.cos(arcAngle) * radius * 1.05;
         z = Math.sin(arcAngle) * radius * 0.95;
         y = (Math.sin(radius * 0.25) * 2.5 + randomGaussian(0, 0.8)) * vThicknessMult;
-        size = 1.0 + Math.random() * 1.6;
         col = Math.random() < 0.5 ? rgbStarForm : rgbStarFormWarm;
       } else {
         layer = 4;
@@ -198,8 +243,6 @@ export function generateGalaxyParticles(
         x = Math.cos(angle) * radius * 1.1;
         z = Math.sin(angle) * radius * 0.9;
         y = randomGaussian(0, 2.5 + (radius / maxRadius) * 3.5) * vThicknessMult;
-        branch = 3.0;
-        size = 0.45 + Math.random() * 0.65;
         col = mixRgb(rgbDust, rgbDust2, Math.random());
       }
 
@@ -211,7 +254,6 @@ export function generateGalaxyParticles(
         layer = 0;
         branch = 2.0;
         radius = 0.4 + Math.pow(Math.random(), 1.5) * 4.8;
-        size = 0.3 + Math.random() * 0.5;
         const angle = Math.random() * Math.PI * 2.0;
         x = Math.cos(angle) * radius;
         z = Math.sin(angle) * radius * 0.95;
@@ -245,7 +287,6 @@ export function generateGalaxyParticles(
 
         x = Math.cos(totalAngle) * radius * 1.08;
         z = Math.sin(totalAngle) * radius * 0.92;
-        // Volumetric vertical profile
         const flaredThickness = 0.65 + Math.pow(radius / maxRadius, 1.6) * 4.2;
         y = randomGaussian(0, flaredThickness * 0.5 * vThicknessMult);
 
@@ -261,7 +302,6 @@ export function generateGalaxyParticles(
         x = Math.cos(nurseryAngle) * radius;
         z = Math.sin(nurseryAngle) * radius * 0.92;
         y = randomGaussian(0, 1.0 + (radius / maxRadius) * 2.8) * vThicknessMult;
-        size = 1.1 + Math.random() * 1.4;
         col = Math.random() < 0.6 ? rgbStarForm : rgbStarFormWarm;
       } else {
         layer = 4;
@@ -275,178 +315,239 @@ export function generateGalaxyParticles(
 
     } else if (morphologyType === 'emerald-multi-arm') {
       // =======================================================================
-      // GALAXY 03: EMERALD MULTI-ARM (Verdant — Deep 3D Volumetric Layers)
+      // GALAXY 03: EMERALD DEEP (Verdant — Dense Volumetric Multi-Arm Ecosystem)
       // =======================================================================
-      if (p < 0.20) {
+      if (p < 0.24) {
+        // Nested luminous core & bulge
         layer = 0;
         branch = 2.0;
-        radius = 0.3 + Math.pow(Math.random(), 1.7) * 4.5;
-        size = 0.3 + Math.random() * 0.6;
+        const coreDistP = Math.random();
+        radius = coreDistP < 0.4 ? Math.pow(Math.random(), 2.2) * 1.8 : 0.6 + Math.pow(Math.random(), 1.4) * 4.6;
         const angle = Math.random() * Math.PI * 2.0;
         x = Math.cos(angle) * radius;
         z = Math.sin(angle) * radius * 0.94;
-        y = randomGaussian(0, (0.35 + radius * 0.22) * vThicknessMult);
+        y = randomGaussian(0, (0.35 + radius * 0.24) * vThicknessMult);
 
-        const coreNorm = Math.min(radius / 4.5, 1.0);
-        if (coreNorm < 0.2) col = mixRgb(rgbCore, rgbCoreHalo, coreNorm * 5.0);
-        else if (coreNorm < 0.6) col = mixRgb(rgbCoreHalo, rgbInner, (coreNorm - 0.2) * 2.5);
-        else col = mixRgb(rgbInner, rgbDeep, (coreNorm - 0.6) * 2.5);
+        const coreNorm = Math.min(radius / 4.6, 1.0);
+        if (coreNorm < 0.12) {
+          col = mixRgb(rgbWhite, rgbCore, coreNorm / 0.12);
+          luminosity *= 1.8;
+          size *= 1.25;
+        } else if (coreNorm < 0.35) {
+          col = mixRgb(rgbCore, rgbCoreHalo, (coreNorm - 0.12) / 0.23);
+          luminosity *= 1.4;
+        } else if (coreNorm < 0.65) {
+          col = mixRgb(rgbCoreHalo, rgbInner, (coreNorm - 0.35) / 0.30);
+        } else {
+          col = mixRgb(rgbInner, rgbDeep, (coreNorm - 0.65) / 0.35);
+        }
 
-      } else if (p < 0.75) {
+      } else if (p < 0.76) {
+        // Dense 3-arm spiral + 1 outer fragmented arm + clustered star-forming knots
         layer = p < 0.48 ? 1 : 2;
         const armPick = Math.random();
         const armIndex = armPick < 0.32 ? 0 : armPick < 0.62 ? 1 : armPick < 0.85 ? 2 : 3;
         branch = armIndex;
 
         const isFragmented = armIndex === 3;
-        const rMax = isFragmented ? maxRadius * 1.15 : maxRadius * 0.95;
-        radius = 3.0 + Math.pow(Math.random(), 1.25) * (rMax - 3.0);
+        const rMax = isFragmented ? maxRadius * 1.15 : maxRadius * 0.98;
+        radius = 2.8 + Math.pow(Math.random(), 1.18) * (rMax - 2.8);
 
-        const armOffset = (armIndex * Math.PI * 2.0) / 3.0 + (isFragmented ? 0.8 : 0.0);
-        const spiralAngle = Math.log(radius * 0.38 + 1.0) * (spiralTightness * (1.0 + armIndex * 0.08));
-        const turbulence = randomGaussian(0, 0.22 + (radius / maxRadius) * 0.35);
-        const totalAngle = armOffset + spiralAngle + turbulence;
+        const armOffset = (armIndex * Math.PI * 2.0) / 3.0 + (isFragmented ? 0.85 : 0.0);
+        const spiralAngle = Math.log(radius * 0.38 + 1.0) * (spiralTightness * (1.0 + armIndex * 0.06));
+        
+        // Arm width and multi-stream dispersion
+        const armWidth = 0.24 * (1.0 + Math.pow(radius / maxRadius, 0.7) * 1.6);
+        const randAngle = randomGaussian(0, armWidth);
+        const totalAngle = armOffset + spiralAngle + randAngle;
 
         x = Math.cos(totalAngle) * radius * 1.06;
         z = Math.sin(totalAngle) * radius * 0.94;
         
-        // Deep multi-layered 3D depth profile (flared envelope)
-        const depthEnvelope = 0.8 + Math.pow(radius / maxRadius, 1.5) * 4.8;
+        // Deep flared 3D vertical profile
+        const depthEnvelope = 0.75 + Math.pow(radius / maxRadius, 1.5) * 4.6;
         y = randomGaussian(0, depthEnvelope * 0.5 * vThicknessMult);
 
+        // Clustered star-forming knots detection
+        let nearestClusterDist = 999.0;
+        for (let c = 0; c < clusterCount; c++) {
+          const dR = radius - clusterRadii[c];
+          const dA = Math.sin(totalAngle - clusterAngles[c]) * radius;
+          const cDist = Math.sqrt(dR * dR + dA * dA);
+          if (cDist < nearestClusterDist) nearestClusterDist = cDist;
+        }
+
         const armNorm = Math.min(radius / maxRadius, 1.0);
-        if (armNorm < 0.3) col = mixRgb(rgbInner, rgbDeep, armNorm * 3.33);
-        else if (armNorm < 0.65) col = mixRgb(rgbDeep, rgbArm1, (armNorm - 0.3) * 2.85);
-        else if (armNorm < 0.85) col = mixRgb(rgbArm1, rgbArm2, (armNorm - 0.65) * 5.0);
-        else col = mixRgb(rgbArm2, rgbDust, (armNorm - 0.85) * 6.66);
+        if (nearestClusterDist < 2.2) {
+          // Inside a bright star-forming knot
+          col = mixRgb(rgbStarForm, rgbStarFormWarm, Math.random());
+          luminosity *= 2.2;
+          size *= 1.4;
+          layer = 3;
+        } else if (profile.isCluster) {
+          // Mid-arm star cluster
+          col = mixRgb(rgbCoreHalo, rgbInner, Math.random());
+          luminosity *= 1.6;
+        } else {
+          // Granular emerald & teal dust stream
+          if (armNorm < 0.28) col = mixRgb(rgbInner, rgbDeep, armNorm / 0.28);
+          else if (armNorm < 0.62) col = mixRgb(rgbDeep, rgbArm1, (armNorm - 0.28) / 0.34);
+          else if (armNorm < 0.85) col = mixRgb(rgbArm1, rgbArm2, (armNorm - 0.62) / 0.23);
+          else col = mixRgb(rgbArm2, rgbDust, (armNorm - 0.85) / 0.15);
+        }
 
       } else if (p < 0.88) {
-        // High-density lime/mint starburst knots
+        // Nebular cloud & starburst filaments
         layer = 3;
-        radius = 4.5 + Math.random() * (maxRadius * 0.8);
+        radius = 4.0 + Math.random() * (maxRadius * 0.85);
         const angle = Math.random() * Math.PI * 2.0;
         x = Math.cos(angle) * radius;
         z = Math.sin(angle) * radius * 0.92;
         y = randomGaussian(0, 1.2 + (radius / maxRadius) * 3.2) * vThicknessMult;
-        size = 1.2 + Math.random() * 1.5;
-        col = Math.random() < 0.55 ? rgbStarForm : rgbStarFormWarm;
+        col = Math.random() < 0.6 ? rgbStarForm : rgbStarFormWarm;
+        luminosity *= 1.8;
       } else {
-        // Layered emerald dust lanes
+        // Deep emerald & teal dust halo
         layer = 4;
-        radius = 6.0 + Math.random() * (maxRadius * 1.35);
+        radius = 5.5 + Math.random() * (maxRadius * 1.35);
         const angle = Math.random() * Math.PI * 2.0;
         x = Math.cos(angle) * radius * 1.1;
         z = Math.sin(angle) * radius * 0.9;
-        y = randomGaussian(0, 4.2 + (radius / maxRadius) * 5.8) * vThicknessMult;
+        y = randomGaussian(0, 3.8 + (radius / maxRadius) * 5.5) * vThicknessMult;
         col = mixRgb(rgbDust, rgbDust2, Math.random());
+        luminosity *= 0.5;
       }
 
     } else if (morphologyType === 'golden-dark-barred') {
       // =======================================================================
-      // GALAXY 04: GOLDEN ECLIPSE (Eclipse — High Contrast Volumetric Disk)
+      // GALAXY 04: GOLDEN ECLIPSE (Eclipse — High Contrast Golden Particle Storm)
       // =======================================================================
-      if (p < 0.25) {
+      if (p < 0.26) {
+        // Nested massive golden core
         layer = 0;
         branch = 2.0;
-        radius = 0.2 + Math.pow(Math.random(), 1.6) * 5.0;
-        size = 0.35 + Math.random() * 0.7;
+        const coreP = Math.random();
+        radius = coreP < 0.45 ? Math.pow(Math.random(), 2.2) * 1.9 : 0.6 + Math.pow(Math.random(), 1.4) * 4.8;
         const angle = Math.random() * Math.PI * 2.0;
         x = Math.cos(angle) * radius;
         z = Math.sin(angle) * radius * 0.9;
         y = randomGaussian(0, (0.4 + radius * 0.18) * vThicknessMult);
 
-        const coreNorm = Math.min(radius / 5.0, 1.0);
-        if (coreNorm < 0.15) col = mixRgb(rgbCore, rgbCoreHalo, coreNorm / 0.15);
-        else if (coreNorm < 0.5) col = mixRgb(rgbCoreHalo, rgbInner, (coreNorm - 0.15) / 0.35);
-        else col = mixRgb(rgbInner, rgbDeep, (coreNorm - 0.5) / 0.5);
+        const coreNorm = Math.min(radius / 4.8, 1.0);
+        if (coreNorm < 0.12) {
+          col = mixRgb(rgbWhite, rgbCore, coreNorm / 0.12);
+          luminosity *= 2.0;
+          size *= 1.3;
+        } else if (coreNorm < 0.45) {
+          col = mixRgb(rgbCore, rgbCoreHalo, (coreNorm - 0.12) / 0.33);
+          luminosity *= 1.5;
+        } else {
+          col = mixRgb(rgbCoreHalo, rgbInner, (coreNorm - 0.45) / 0.55);
+        }
 
-      } else if (p < 0.76) {
+      } else if (p < 0.77) {
         layer = p < 0.52 ? 1 : 2;
-        const isBar = Math.random() < 0.35;
+        const isBar = Math.random() < 0.38;
         const armIndex = Math.random() < 0.6 ? 0 : 1;
         branch = armIndex;
 
         if (isBar) {
-          const barLength = 16.0;
+          // Elongated High-Density Golden Bar
+          const barLength = 17.5;
           x = (Math.random() - 0.5) * 2.0 * barLength;
-          z = randomGaussian(0, 1.8);
+          z = randomGaussian(0, 1.9);
           radius = Math.sqrt(x * x + z * z);
-          y = randomGaussian(0, 1.0 * vThicknessMult);
+          y = randomGaussian(0, 1.1 * vThicknessMult);
           col = mixRgb(rgbInner, rgbArm1, Math.min(Math.abs(x) / barLength, 1.0));
+          luminosity *= 1.4;
         } else {
-          radius = 5.0 + Math.pow(Math.random(), 1.2) * (maxRadius - 5.0);
+          // Dense Golden Spiral Streams
+          radius = 4.5 + Math.pow(Math.random(), 1.18) * (maxRadius - 4.5);
           const spiralAngle = Math.log(radius * 0.32 + 1.0) * spiralTightness;
           const armOffset = (armIndex * Math.PI * 2.0) / 2.0;
-          const totalAngle = armOffset + spiralAngle + randomGaussian(0, 0.25);
+          const armSpread = 0.25 * (1.0 + (radius / maxRadius) * 1.2);
+          const totalAngle = armOffset + spiralAngle + randomGaussian(0, armSpread);
 
           x = Math.cos(totalAngle) * radius * 1.15;
           z = Math.sin(totalAngle) * radius * 0.85;
-          const barThickness = 0.6 + Math.pow(radius / maxRadius, 1.4) * 3.5;
+          const barThickness = 0.6 + Math.pow(radius / maxRadius, 1.4) * 3.8;
           y = randomGaussian(0, barThickness * vThicknessMult);
 
           const armNorm = Math.min(radius / maxRadius, 1.0);
-          if (armNorm < 0.3) col = mixRgb(rgbInner, rgbArm1, armNorm * 3.33);
-          else if (armNorm < 0.7) col = mixRgb(rgbArm1, rgbArm2, (armNorm - 0.3) * 2.5);
-          else col = mixRgb(rgbArm2, rgbArm3, (armNorm - 0.7) * 3.33);
+          if (armNorm < 0.3) col = mixRgb(rgbInner, rgbArm1, armNorm / 0.3);
+          else if (armNorm < 0.7) col = mixRgb(rgbArm1, rgbArm2, (armNorm - 0.3) / 0.4);
+          else col = mixRgb(rgbArm2, rgbArm3, (armNorm - 0.7) / 0.3);
         }
 
-        // Dark dust voids creating parallax
-        const darkBeltNoise = hashNoise2D(x * 0.15, z * 0.15);
-        if (darkBeltNoise > 0.68) {
-          col = mixRgb(col, rgbDust, 0.85);
-          size *= 0.6;
+        // High-Contrast Black Dust Lane Voids (producing deep visual parallax)
+        const darkBeltNoise = hashNoise2D(x * 0.16, z * 0.16);
+        if (darkBeltNoise > 0.66) {
+          col = mixRgb(col, rgbDust, 0.92);
+          size *= 0.5;
+          luminosity *= 0.3;
         }
 
       } else if (p < 0.88) {
+        // Amber starburst clusters
         layer = 3;
-        radius = 4.0 + Math.random() * (maxRadius * 0.8);
+        radius = 3.5 + Math.random() * (maxRadius * 0.82);
         const angle = Math.random() * Math.PI * 2.0;
         x = Math.cos(angle) * radius;
         z = Math.sin(angle) * radius * 0.9;
         y = randomGaussian(0, 1.4) * vThicknessMult;
-        size = 1.0 + Math.random() * 1.4;
-        col = Math.random() < 0.5 ? rgbStarForm : rgbStarFormWarm;
+        col = Math.random() < 0.55 ? rgbStarForm : rgbStarFormWarm;
+        luminosity *= 1.8;
       } else {
+        // Deep bronze & black dust halo
         layer = 4;
-        radius = 7.0 + Math.random() * (maxRadius * 1.3);
+        radius = 6.5 + Math.random() * (maxRadius * 1.32);
         const angle = Math.random() * Math.PI * 2.0;
         x = Math.cos(angle) * radius * 1.1;
         z = Math.sin(angle) * radius * 0.9;
-        y = randomGaussian(0, 3.5 + (radius / maxRadius) * 4.8) * vThicknessMult;
+        y = randomGaussian(0, 3.6 + (radius / maxRadius) * 4.8) * vThicknessMult;
         col = mixRgb(rgbDust, rgbDust2, Math.random());
+        luminosity *= 0.45;
       }
 
     } else if (morphologyType === 'turbulent-crimson') {
       // =======================================================================
-      // GALAXY 05: TURBULENT CRIMSON (Red Veil — Dynamic Starbursts)
+      // GALAXY 05: TURBULENT CRIMSON (Red Veil — Violent Energetic Starbursts)
       // =======================================================================
-      if (p < 0.18) {
+      if (p < 0.22) {
+        // Nested white-hot and crimson core
         layer = 0;
         branch = 2.0;
-        radius = 0.3 + Math.pow(Math.random(), 1.5) * 4.4;
-        size = 0.35 + Math.random() * 0.6;
+        const coreP = Math.random();
+        radius = coreP < 0.45 ? Math.pow(Math.random(), 2.2) * 1.8 : 0.5 + Math.pow(Math.random(), 1.4) * 4.5;
         const angle = Math.random() * Math.PI * 2.0;
         x = Math.cos(angle) * radius;
         z = Math.sin(angle) * radius * 0.95;
         y = randomGaussian(0, (0.4 + radius * 0.22) * vThicknessMult);
 
-        const coreNorm = Math.min(radius / 4.4, 1.0);
-        if (coreNorm < 0.2) col = mixRgb(rgbCore, rgbCoreHalo, coreNorm * 5.0);
-        else if (coreNorm < 0.6) col = mixRgb(rgbCoreHalo, rgbInner, (coreNorm - 0.2) * 2.5);
-        else col = mixRgb(rgbInner, rgbDeep, (coreNorm - 0.6) * 2.5);
+        const coreNorm = Math.min(radius / 4.5, 1.0);
+        if (coreNorm < 0.12) {
+          col = mixRgb(rgbWhite, rgbCore, coreNorm / 0.12);
+          luminosity *= 2.2;
+          size *= 1.35;
+        } else if (coreNorm < 0.45) {
+          col = mixRgb(rgbCore, rgbCoreHalo, (coreNorm - 0.12) / 0.33);
+          luminosity *= 1.6;
+        } else {
+          col = mixRgb(rgbCoreHalo, rgbInner, (coreNorm - 0.45) / 0.55);
+        }
 
-      } else if (p < 0.74) {
+      } else if (p < 0.75) {
         layer = p < 0.46 ? 1 : 2;
         const armPick = Math.random();
         const armIndex = armPick < 0.48 ? 0 : armPick < 0.82 ? 1 : 2;
         branch = armIndex;
 
         const isFragmented = armIndex === 2;
-        radius = 4.0 + Math.pow(Math.random(), 1.15) * (maxRadius * (isFragmented ? 1.25 : 1.0) - 4.0);
+        radius = 3.5 + Math.pow(Math.random(), 1.15) * (maxRadius * (isFragmented ? 1.25 : 1.0) - 3.5);
 
         const armOffset = (armIndex * Math.PI * 2.0) / 2.2;
         const spiralAngle = Math.log(radius * 0.34 + 1.0) * spiralTightness;
-        const violentTurbulence = randomGaussian(0, 0.35 + (radius / maxRadius) * 0.55);
+        const violentTurbulence = randomGaussian(0, 0.38 + (radius / maxRadius) * 0.55);
         const totalAngle = armOffset + spiralAngle + violentTurbulence;
 
         x = Math.cos(totalAngle) * radius * 1.12;
@@ -454,93 +555,152 @@ export function generateGalaxyParticles(
         const crimThickness = 0.8 + Math.pow(radius / maxRadius, 1.4) * 4.8;
         y = randomGaussian(0, crimThickness * 0.5 * vThicknessMult);
 
+        // Clustered starburst cavities along crimson arms
+        let nearestClusterDist = 999.0;
+        for (let c = 0; c < clusterCount; c++) {
+          const dR = radius - clusterRadii[c];
+          const dA = Math.sin(totalAngle - clusterAngles[c]) * radius;
+          const cDist = Math.sqrt(dR * dR + dA * dA);
+          if (cDist < nearestClusterDist) nearestClusterDist = cDist;
+        }
+
         const armNorm = Math.min(radius / maxRadius, 1.0);
-        if (armNorm < 0.3) col = mixRgb(rgbDeep, rgbArm1, armNorm * 3.33);
-        else if (armNorm < 0.65) col = mixRgb(rgbArm1, rgbArm2, (armNorm - 0.3) * 2.85);
-        else col = mixRgb(rgbArm2, rgbArm3, (armNorm - 0.65) * 2.85);
+        if (nearestClusterDist < 2.4) {
+          // Violent white-hot & orange starburst cavity
+          col = mixRgb(rgbWhite, rgbStarFormWarm, Math.random() * 0.7);
+          luminosity *= 2.4;
+          size *= 1.45;
+          layer = 3;
+        } else if (profile.isCluster) {
+          col = mixRgb(rgbStarFormWarm, rgbStarForm, Math.random());
+          luminosity *= 1.7;
+        } else {
+          if (armNorm < 0.28) col = mixRgb(rgbDeep, rgbArm1, armNorm / 0.28);
+          else if (armNorm < 0.65) col = mixRgb(rgbArm1, rgbArm2, (armNorm - 0.28) / 0.37);
+          else col = mixRgb(rgbArm2, rgbArm3, (armNorm - 0.65) / 0.35);
+        }
 
       } else if (p < 0.90) {
+        // Red nebular pockets & plasma knots
         layer = 3;
-        radius = 4.0 + Math.random() * (maxRadius * 0.85);
+        radius = 3.5 + Math.random() * (maxRadius * 0.85);
         const angle = Math.random() * Math.PI * 2.0;
-        const knotClump = (hashNoise2D(angle * 5.0, radius * 2.5) - 0.5) * 2.0;
+        const knotClump = (hashNoise2D(angle * 5.0, radius * 2.5) - 0.5) * 2.2;
         x = Math.cos(angle) * radius + knotClump;
         z = Math.sin(angle) * radius * 0.9 + knotClump;
         y = randomGaussian(0, 1.8 + (radius / maxRadius) * 3.2) * vThicknessMult;
-        size = 1.3 + Math.random() * 1.7;
         col = Math.random() < 0.6 ? rgbStarForm : rgbStarFormWarm;
+        luminosity *= 1.9;
       } else {
+        // Dark crimson & near-black outer dust
         layer = 4;
-        radius = 7.0 + Math.random() * (maxRadius * 1.4);
+        radius = 6.5 + Math.random() * (maxRadius * 1.4);
         const angle = Math.random() * Math.PI * 2.0;
         x = Math.cos(angle) * radius * 1.15;
         z = Math.sin(angle) * radius * 0.85;
         y = randomGaussian(0, 4.5 + (radius / maxRadius) * 6.0) * vThicknessMult;
         col = mixRgb(rgbDust, rgbDust2, Math.random());
+        luminosity *= 0.45;
       }
 
     } else {
       // =======================================================================
-      // GALAXY 06: MASSIVE CELESTIAL FORGE (Aetheris — Centerpiece Volumetric Scale)
+      // GALAXY 06: CELESTIAL FORGE (Aetheris — Monumental Highest Density Centerpiece)
       // =======================================================================
-      if (p < 0.24) {
+      if (p < 0.28) {
+        // Nested monumental luminous core & energy axis root
         layer = 0;
         branch = 2.0;
-        radius = 0.2 + Math.pow(Math.random(), 1.6) * 6.5;
-        size = 0.4 + Math.random() * 0.8;
+        const coreP = Math.random();
+        radius = coreP < 0.5 ? Math.pow(Math.random(), 2.2) * 2.2 : 0.6 + Math.pow(Math.random(), 1.4) * 6.8;
         const angle = Math.random() * Math.PI * 2.0;
         x = Math.cos(angle) * radius;
         z = Math.sin(angle) * radius * 0.95;
-        y = randomGaussian(0, (0.45 + radius * 0.2) * vThicknessMult);
+        y = randomGaussian(0, (0.45 + radius * 0.20) * vThicknessMult);
 
-        const coreNorm = Math.min(radius / 6.5, 1.0);
-        if (coreNorm < 0.15) col = mixRgb(rgbCore, rgbCoreHalo, coreNorm / 0.15);
-        else if (coreNorm < 0.45) col = mixRgb(rgbCoreHalo, rgbInner, (coreNorm - 0.15) / 0.30);
-        else if (coreNorm < 0.75) col = mixRgb(rgbInner, rgbDeep, (coreNorm - 0.45) / 0.30);
-        else col = mixRgb(rgbDeep, rgbArm1, (coreNorm - 0.75) / 0.25);
+        const coreNorm = Math.min(radius / 6.8, 1.0);
+        if (coreNorm < 0.10) {
+          col = rgbWhite;
+          luminosity *= 2.5;
+          size *= 1.4;
+        } else if (coreNorm < 0.35) {
+          col = mixRgb(rgbWhite, rgbCoreHalo, (coreNorm - 0.10) / 0.25);
+          luminosity *= 1.8;
+        } else if (coreNorm < 0.65) {
+          col = mixRgb(rgbCoreHalo, rgbInner, (coreNorm - 0.35) / 0.30);
+          luminosity *= 1.4;
+        } else {
+          col = mixRgb(rgbInner, rgbDeep, (coreNorm - 0.65) / 0.35);
+        }
 
       } else if (p < 0.78) {
+        // 4 Grand design spiral arms + 8 sub-branches + dense stellar fields
         layer = p < 0.52 ? 1 : 2;
         const armIndex = Math.floor(Math.random() * 4);
         branch = armIndex;
 
-        radius = 3.5 + Math.pow(Math.random(), 1.2) * (maxRadius - 3.5);
+        radius = 3.0 + Math.pow(Math.random(), 1.18) * (maxRadius - 3.0);
         const armOffset = (armIndex * Math.PI * 2.0) / 4.0;
         const spiralAngle = Math.log(radius * 0.32 + 1.0) * spiralTightness;
-        const dispersion = Math.pow(radius / maxRadius, 0.8) * 1.8;
-        const randAngle = randomGaussian(0, 0.22 * dispersion);
+        const armSpread = 0.22 * (1.0 + Math.pow(radius / maxRadius, 0.8) * 1.8);
+        const randAngle = randomGaussian(0, armSpread);
         const totalAngle = armOffset + spiralAngle + randAngle;
 
         x = Math.cos(totalAngle) * radius * 1.08;
         z = Math.sin(totalAngle) * radius * 0.92;
         
-        // Massive grand design volumetric envelope
-        const aetherisThickness = 0.75 + Math.pow(radius / maxRadius, 1.5) * 5.4;
+        // Massive grand design volumetric 3D envelope
+        const aetherisThickness = 0.8 + Math.pow(radius / maxRadius, 1.5) * 5.4;
         y = randomGaussian(0, aetherisThickness * 0.5 * vThicknessMult);
 
+        // Clustered H II starburst regions along all 4 arms
+        let nearestClusterDist = 999.0;
+        for (let c = 0; c < clusterCount; c++) {
+          const dR = radius - clusterRadii[c];
+          const dA = Math.sin(totalAngle - clusterAngles[c]) * radius;
+          const cDist = Math.sqrt(dR * dR + dA * dA);
+          if (cDist < nearestClusterDist) nearestClusterDist = cDist;
+        }
+
         const armNorm = Math.min(radius / maxRadius, 1.0);
-        if (armNorm < 0.25) col = mixRgb(rgbInner, rgbDeep, armNorm * 4.0);
-        else if (armNorm < 0.55) col = mixRgb(rgbDeep, rgbArm1, (armNorm - 0.25) * 3.33);
-        else if (armNorm < 0.80) col = mixRgb(rgbArm1, rgbArm2, (armNorm - 0.55) * 4.0);
-        else col = mixRgb(rgbArm2, rgbArm3, (armNorm - 0.80) * 5.0);
+        if (nearestClusterDist < 2.5) {
+          // Luminous H II region & orange plasma knot
+          col = mixRgb(rgbStarFormWarm, rgbStarForm, Math.random());
+          luminosity *= 2.3;
+          size *= 1.45;
+          layer = 3;
+        } else if (profile.isCluster) {
+          // Blue-cyan star cluster
+          col = mixRgb(rgbInner, rgbWhite, Math.random() * 0.6);
+          luminosity *= 1.7;
+        } else {
+          // Dense blue & cyan spiral stream
+          if (armNorm < 0.24) col = mixRgb(rgbInner, rgbDeep, armNorm / 0.24);
+          else if (armNorm < 0.54) col = mixRgb(rgbDeep, rgbArm1, (armNorm - 0.24) / 0.30);
+          else if (armNorm < 0.80) col = mixRgb(rgbArm1, rgbArm2, (armNorm - 0.54) / 0.26);
+          else col = mixRgb(rgbArm2, rgbArm3, (armNorm - 0.80) / 0.20);
+        }
 
       } else if (p < 0.90) {
+        // Bright H II star-forming regions & amber plasma clouds
         layer = 3;
-        radius = 5.0 + Math.random() * (maxRadius * 0.85);
+        radius = 4.5 + Math.random() * (maxRadius * 0.88);
         const angle = Math.random() * Math.PI * 2.0;
         x = Math.cos(angle) * radius * 1.05;
         z = Math.sin(angle) * radius * 0.95;
         y = (Math.sin(radius * 0.2) * 3.5 + randomGaussian(0, 1.6)) * vThicknessMult;
-        size = 1.3 + Math.random() * 1.8;
         col = Math.random() < 0.55 ? rgbStarForm : rgbStarFormWarm;
+        luminosity *= 2.0;
       } else {
+        // Deep blue & dark dust lanes
         layer = 4;
-        radius = 9.0 + Math.random() * (maxRadius * 1.35);
+        radius = 8.0 + Math.random() * (maxRadius * 1.38);
         const angle = Math.random() * Math.PI * 2.0;
         x = Math.cos(angle) * radius * 1.12;
         z = Math.sin(angle) * radius * 0.88;
         y = randomGaussian(0, 4.8 + (radius / maxRadius) * 6.5) * vThicknessMult;
         col = mixRgb(rgbDust, rgbDust2, Math.random());
+        luminosity *= 0.5;
       }
     }
 
@@ -560,6 +720,7 @@ export function generateGalaxyParticles(
     distances[i] = Math.min(radius / maxRadius, 1.0);
     layers[i] = layer;
     coreTypes[i] = coreType;
+    luminosities[i] = luminosity;
   }
 
   return {
@@ -573,6 +734,7 @@ export function generateGalaxyParticles(
     distances,
     layers,
     coreTypes,
+    luminosities,
   };
 }
 

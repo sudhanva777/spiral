@@ -23,10 +23,10 @@ export function detectQualityTier(): QualityConfig {
   if (isMobile) {
     return {
       tier: 'low',
-      particleCount: 65000,
-      nebulaCount: 1500,
-      starCount: 4000,
-      foregroundDustCount: 600,
+      particleCount: 100000,
+      nebulaCount: 2000,
+      starCount: 6000,
+      foregroundDustCount: 800,
       dpr: Math.min(window.devicePixelRatio || 1, 1.5),
       bloomEnabled: true,
       bloomRadius: 0.30,
@@ -37,10 +37,10 @@ export function detectQualityTier(): QualityConfig {
   if (isHighEnd) {
     return {
       tier: 'ultra',
-      particleCount: 260000,
-      nebulaCount: 4000,
-      starCount: 15000,
-      foregroundDustCount: 2500,
+      particleCount: 750000,
+      nebulaCount: 6000,
+      starCount: 25000,
+      foregroundDustCount: 4000,
       dpr: Math.min(window.devicePixelRatio || 1, 2.0),
       bloomEnabled: true,
       bloomRadius: 0.40,
@@ -50,10 +50,10 @@ export function detectQualityTier(): QualityConfig {
 
   return {
     tier: 'high',
-    particleCount: 160000,
-    nebulaCount: 2800,
-    starCount: 10000,
-    foregroundDustCount: 1800,
+    particleCount: 500000,
+    nebulaCount: 4500,
+    starCount: 18000,
+    foregroundDustCount: 2800,
     dpr: Math.min(window.devicePixelRatio || 1, 1.75),
     bloomEnabled: true,
     bloomRadius: 0.45,
@@ -66,10 +66,10 @@ export function getQualityConfigForTier(tier: QualityTier): QualityConfig {
     case 'ultra':
       return {
         tier: 'ultra',
-        particleCount: 300000,
-        nebulaCount: 4500,
-        starCount: 16000,
-        foregroundDustCount: 2500,
+        particleCount: 750000,
+        nebulaCount: 6000,
+        starCount: 25000,
+        foregroundDustCount: 4000,
         dpr: Math.min(window.devicePixelRatio || 1, 2.0),
         bloomEnabled: true,
         bloomRadius: 0.40,
@@ -78,10 +78,10 @@ export function getQualityConfigForTier(tier: QualityTier): QualityConfig {
     case 'high':
       return {
         tier: 'high',
-        particleCount: 180000,
-        nebulaCount: 3000,
-        starCount: 12000,
-        foregroundDustCount: 1800,
+        particleCount: 500000,
+        nebulaCount: 4500,
+        starCount: 18000,
+        foregroundDustCount: 2800,
         dpr: Math.min(window.devicePixelRatio || 1, 1.75),
         bloomEnabled: true,
         bloomRadius: 0.45,
@@ -90,10 +90,10 @@ export function getQualityConfigForTier(tier: QualityTier): QualityConfig {
     case 'medium':
       return {
         tier: 'medium',
-        particleCount: 100000,
-        nebulaCount: 2000,
-        starCount: 8000,
-        foregroundDustCount: 1200,
+        particleCount: 250000,
+        nebulaCount: 3000,
+        starCount: 12000,
+        foregroundDustCount: 1800,
         dpr: Math.min(window.devicePixelRatio || 1, 1.5),
         bloomEnabled: true,
         bloomRadius: 0.35,
@@ -102,10 +102,10 @@ export function getQualityConfigForTier(tier: QualityTier): QualityConfig {
     case 'low':
       return {
         tier: 'low',
-        particleCount: 50000,
-        nebulaCount: 1200,
-        starCount: 4000,
-        foregroundDustCount: 600,
+        particleCount: 100000,
+        nebulaCount: 1800,
+        starCount: 6000,
+        foregroundDustCount: 800,
         dpr: Math.min(window.devicePixelRatio || 1, 1.25),
         bloomEnabled: false,
         bloomRadius: 0.30,
