@@ -23,6 +23,7 @@ export class GalaxyParticles {
     this.geometry.setAttribute('aBranch', new THREE.BufferAttribute(data.branches, 1));
     this.geometry.setAttribute('aDistance', new THREE.BufferAttribute(data.distances, 1));
     this.geometry.setAttribute('aLayer', new THREE.BufferAttribute(data.layers, 1));
+    this.geometry.setAttribute('aCoreType', new THREE.BufferAttribute(data.coreTypes, 1));
 
     this.material = new THREE.ShaderMaterial({
       vertexShader: galaxyVertexShader,
@@ -43,6 +44,7 @@ export class GalaxyParticles {
         uTilt: { value: 0.0 },
         uCoreGlowSize: { value: 1.0 },
         uIntensity: { value: 1.0 },
+        uCoreFalloff: { value: 6.5 },
       },
     });
 
@@ -88,6 +90,7 @@ export class GalaxyParticles {
     this.geometry.setAttribute('aBranch', new THREE.BufferAttribute(data.branches, 1));
     this.geometry.setAttribute('aDistance', new THREE.BufferAttribute(data.distances, 1));
     this.geometry.setAttribute('aLayer', new THREE.BufferAttribute(data.layers, 1));
+    this.geometry.setAttribute('aCoreType', new THREE.BufferAttribute(data.coreTypes, 1));
 
     this.points.geometry = this.geometry;
   }

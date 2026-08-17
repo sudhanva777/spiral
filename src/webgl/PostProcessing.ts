@@ -53,9 +53,9 @@ export class PostProcessingPipeline {
     camera: THREE.PerspectiveCamera,
     width: number,
     height: number,
-    bloomStrength = 0.85,
-    bloomRadius = 0.6,
-    bloomThreshold = 0.55
+    bloomStrength = 0.55,
+    bloomRadius = 0.40,
+    bloomThreshold = 0.70
   ) {
     const renderTarget = new THREE.WebGLRenderTarget(width, height, {
       type: THREE.HalfFloatType,

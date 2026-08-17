@@ -28,8 +28,8 @@ export function detectQualityTier(): QualityConfig {
       starCount: 4000,
       dpr: Math.min(window.devicePixelRatio || 1, 1.5),
       bloomEnabled: true,
-      bloomRadius: 0.5,
-      bloomStrength: 0.65,
+      bloomRadius: 0.30,
+      bloomStrength: 0.40,
     };
   }
 
@@ -41,8 +41,8 @@ export function detectQualityTier(): QualityConfig {
       starCount: 15000,
       dpr: Math.min(window.devicePixelRatio || 1, 2.0),
       bloomEnabled: true,
-      bloomRadius: 0.6,
-      bloomStrength: 0.85,
+      bloomRadius: 0.40,
+      bloomStrength: 0.55,
     };
   }
 
@@ -53,8 +53,8 @@ export function detectQualityTier(): QualityConfig {
     starCount: 10000,
     dpr: Math.min(window.devicePixelRatio || 1, 1.75),
     bloomEnabled: true,
-    bloomRadius: 0.55,
-    bloomStrength: 0.75,
+    bloomRadius: 0.45,
+    bloomStrength: 0.60,
   };
 }
 
@@ -68,8 +68,8 @@ export function getQualityConfigForTier(tier: QualityTier): QualityConfig {
         starCount: 16000,
         dpr: Math.min(window.devicePixelRatio || 1, 2.0),
         bloomEnabled: true,
-        bloomRadius: 0.6,
-        bloomStrength: 0.85,
+        bloomRadius: 0.40,
+        bloomStrength: 0.55,
       };
     case 'high':
       return {
@@ -79,8 +79,8 @@ export function getQualityConfigForTier(tier: QualityTier): QualityConfig {
         starCount: 12000,
         dpr: Math.min(window.devicePixelRatio || 1, 1.75),
         bloomEnabled: true,
-        bloomRadius: 0.55,
-        bloomStrength: 0.75,
+        bloomRadius: 0.45,
+        bloomStrength: 0.60,
       };
     case 'medium':
       return {
@@ -90,8 +90,8 @@ export function getQualityConfigForTier(tier: QualityTier): QualityConfig {
         starCount: 8000,
         dpr: Math.min(window.devicePixelRatio || 1, 1.5),
         bloomEnabled: true,
-        bloomRadius: 0.5,
-        bloomStrength: 0.65,
+        bloomRadius: 0.35,
+        bloomStrength: 0.45,
       };
     case 'low':
       return {
@@ -101,8 +101,8 @@ export function getQualityConfigForTier(tier: QualityTier): QualityConfig {
         starCount: 4000,
         dpr: Math.min(window.devicePixelRatio || 1, 1.25),
         bloomEnabled: false,
-        bloomRadius: 0.4,
-        bloomStrength: 0.5,
+        bloomRadius: 0.30,
+        bloomStrength: 0.35,
       };
   }
 }
