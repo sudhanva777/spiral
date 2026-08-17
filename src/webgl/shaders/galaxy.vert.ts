@@ -27,6 +27,12 @@ uniform float uMouseInfluence;   // Dynamic gravitational pull strength
 uniform float uTilt;             // Galaxy tilt parameter
 uniform float uCoreFalloff;      // Radial light falloff steepness
 
+// Phase 4 & 5 Uniforms: Click Energy Pulse & Core Inspection
+uniform vec3 uPulseOrigin;       // 3D origin of the expanding energy wave
+uniform float uPulseProgress;    // 0.0 to 1.0 expansion progress
+uniform float uPulseStrength;    // Amplitude of the wave
+uniform float uCoreInspection;   // 0.0 (normal) to 1.0 (close-up inspection mode)
+
 // Varyings to Fragment Shader
 varying vec3 vColor;
 varying float vAlpha;
@@ -36,7 +42,9 @@ varying float vNoise;
 varying float vDepth;
 varying float vLayer;
 varying float vCoreType;
-varying float vAngular;     // Angular position for filament/gap patterns
+varying float vAngular;          // Angular position for filament/gap patterns
+varying float vPulseFactor;      // Luminous wavefront flash intensity
+varying float vCoreInspection;   // LOD factor for fragment shader
 
 // Palette definitions in linear RGB — outer galaxy & arms
 const vec3 cDarkViolet    = vec3(0.149, 0.067, 0.239); // #26113D
@@ -87,24 +95,39 @@ void main() {
   pos.y += verticalWave + curl.y * 1.2;
   pos.xz += curl.xz * (0.8 + normDist * 0.5);
 
-  // 3. Gravitational Mouse Attraction Well (Smooth 3D distortion)
+  // 3. Phase 3: Interactive Gravitational Lensing & Relativistic Frame Dragging
   vec3 diffToMouse = uMousePos3D - pos;
   float distToMouse = length(diffToMouse);
   if (distToMouse > 0.001) {
-    float pull = (1.0 / (distToMouse * distToMouse * 0.15 + 1.0)) * uMouseInfluence * 2.5;
-    // Spiral twist around the mouse cursor
-    vec3 tangent = cross(normalize(diffToMouse), vec3(0.0, 1.0, 0.0));
-    pos += normalize(diffToMouse) * pull * 1.2 + tangent * pull * 0.6;
+    float gravityFalloff = smoothstep(18.0, 0.0, distToMouse);
+    float pull = gravityFalloff * gravityFalloff * uMouseInfluence * 2.8;
+    // Frame-dragging swirl around cursor
+    vec3 tangent = cross(normalize(diffToMouse + vec3(0.0001, 0.0, 0.0)), vec3(0.0, 1.0, 0.0));
+    pos += normalize(diffToMouse) * (pull * 1.25) + tangent * (pull * 0.75);
+    pos.y += sin(distToMouse * 0.6 - uTime * 2.5) * (gravityFalloff * uMouseInfluence * 0.5);
   }
 
-  // 4. Cinematic Entrance Materialization (Expand outward & spin in)
+  // 4. Phase 4: Click Energy Wave Pulse
+  // Radial expanding wavefront from uPulseOrigin
+  float pulseWaveRadius = uPulseProgress * 44.0;
+  float distToPulse = length(pos - uPulseOrigin);
+  float pulseDistDiff = abs(distToPulse - pulseWaveRadius);
+  float pulseWaveFactor = smoothstep(3.5, 0.0, pulseDistDiff) * (1.0 - uPulseProgress) * uPulseStrength;
+  
+  if (pulseWaveFactor > 0.001) {
+    vec3 pulseDir = distToPulse > 0.01 ? normalize(pos - uPulseOrigin) : vec3(0.0, 1.0, 0.0);
+    pos += pulseDir * (pulseWaveFactor * 1.6);
+    pos.y += sin(pulseDistDiff * 1.8) * (pulseWaveFactor * 1.2);
+  }
+
+  // 5. Cinematic Entrance Materialization (Expand outward & spin in)
   float entranceDelay = smoothstep(0.0, 1.0, uEntranceProgress * 1.4 - normDist * 0.5);
   pos *= clamp(entranceDelay, 0.001, 1.0);
 
-  // 5. Compute angular position for filament/gap patterns in fragment shader
+  // 6. Compute angular position for filament/gap patterns in fragment shader
   float angularPos = atan(pos.z, pos.x);
 
-  // 6. Compute Dynamic Color Spectrum
+  // 7. Compute Dynamic Color Spectrum
   vec3 col = cDarkViolet;
   float nVal = snoise(vec3(pos.xz * 0.05, uTime * 0.08));
 
@@ -193,12 +216,14 @@ void main() {
   vLayer = aLayer;
   vCoreType = aCoreType;
   vAngular = angularPos;
+  vPulseFactor = pulseWaveFactor;
+  vCoreInspection = uCoreInspection;
 
   // View Transformation & Size Attenuation
   vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
   vDepth = -mvPosition.z;
 
-  // Depth-aware particle sizing with high-DPI scaling
+  // Base Particle Sizing with DPI
   float baseSize = aSize * aScale * uSizeMultiplier;
 
   if (aLayer == 0.0) {
@@ -211,6 +236,11 @@ void main() {
     if (aCoreType == 2.0) coreSizeMod *= 0.85; // Filaments: thin
     if (aCoreType == 3.0) coreSizeMod *= 1.1;  // Energy knots: slightly larger
 
+    // Phase 5: Core Inspection LOD sizing optimization
+    // When camera is close to core, refine particle size so individual particles remain distinct
+    float inspectionSizeMod = mix(1.0, 0.75, uCoreInspection);
+    coreSizeMod *= inspectionSizeMod;
+
     baseSize *= coreSizeMod;
   }
   if (aLayer == 4.0) baseSize *= 0.7; // Outer dust micro size
@@ -220,6 +250,11 @@ void main() {
     float depthBias = clamp(1.0 + pos.y * 0.04, 0.85, 1.15);
     baseSize *= depthBias;
   }
+
+  // Phase 2: Physical Depth-based sizing curve
+  // Near particles slightly larger, far particles slightly smaller (smooth continuous transition)
+  float depthSizeMod = clamp(1.0 + (35.0 - vDepth) * 0.007, 0.75, 1.30);
+  baseSize *= depthSizeMod;
 
   // Perspective point size attenuation
   gl_PointSize = baseSize * (160.0 / -mvPosition.z) * uPixelRatio;

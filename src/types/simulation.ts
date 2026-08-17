@@ -1,10 +1,20 @@
 export type QualityTier = 'ultra' | 'high' | 'medium' | 'low';
 
+export type InteractionState =
+  | 'CINEMATIC'
+  | 'EXPLORING'
+  | 'GRAVITY_INTERACTION'
+  | 'PULSE'
+  | 'CORE_TRANSITION'
+  | 'CORE_INSPECTION'
+  | 'RETURNING';
+
 export interface QualityConfig {
   tier: QualityTier;
   particleCount: number;
   nebulaCount: number;
   starCount: number;
+  foregroundDustCount: number;
   dpr: number;
   bloomEnabled: boolean;
   bloomRadius: number;

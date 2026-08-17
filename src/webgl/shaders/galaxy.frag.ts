@@ -12,6 +12,8 @@ varying float vDepth;
 varying float vLayer;
 varying float vCoreType;
 varying float vAngular;
+varying float vPulseFactor;
+varying float vCoreInspection;
 
 uniform float uCoreGlowSize;
 uniform float uIntensity;
@@ -31,8 +33,10 @@ void main() {
   // ---------------------------------------------------------------
   // SHARPER PARTICLE SHAPE
   // Bright particle center + small soft halo = individual readability
+  // In Core Inspection Mode, sharpen particles even further for micro-clarity
   // ---------------------------------------------------------------
-  float particleCore = 1.0 - smoothstep(0.0, 0.28, r);
+  float coreSmoothRadius = mix(0.28, 0.22, vCoreInspection);
+  float particleCore = 1.0 - smoothstep(0.0, coreSmoothRadius, r);
   float particleHalo = 1.0 - smoothstep(0.08, 0.50, r);
   float shapeAlpha = particleCore * 0.82 + particleHalo * 0.18;
 
@@ -43,13 +47,10 @@ void main() {
   // ---------------------------------------------------------------
   if (vLayer < 0.5) {
     // Distance from galactic center (0.0 = center, 1.0 = outer galaxy)
-    // vDistance is normalized to maxRadius (40.0), but core is within ~5.5 units
-    // So core particles have vDistance roughly 0.0–0.14
     float coreRadial = clamp(vDistance * 7.2, 0.0, 1.0); // Re-normalize for core region
 
     // ---------------------------------------------------------------
     // RADIAL LIGHT FALLOFF — exponential, steep near center, soft farther
-    // This modulates BRIGHTNESS, not particle structure (alpha)
     // ---------------------------------------------------------------
     float radialGlow = exp(-coreRadial * uCoreFalloff);
 
@@ -64,13 +65,11 @@ void main() {
     float gapNoise = gapFreq1 * 0.5 + gapFreq2 * 0.3 + gapFreq3 * 0.2;
 
     // Dark gaps: regions where noise is negative become darker
-    // Stronger gaps in mid-core (not at very center or outer edge)
     float gapMask = smoothstep(0.05, 0.25, coreRadial) * smoothstep(0.95, 0.6, coreRadial);
     float darkGap = 1.0 - gapMask * smoothstep(-0.05, 0.35, -gapNoise) * 0.55;
 
     // ---------------------------------------------------------------
     // EMISSIVE CONTROL — controlled white highlight at particle center
-    // Only innermost region gets strong specular; limited by radial distance
     // ---------------------------------------------------------------
     float emissiveStrength = pow(particleCore, 2.5) * 0.30 * radialGlow;
 
@@ -99,17 +98,42 @@ void main() {
       // Filament particles: slightly sharper rendering
       shapeAlpha = particleCore * 0.88 + particleHalo * 0.12;
     }
-    // Micro dust (0.0) and small luminous (1.0) use default shape
+
+    // Phase 5: Core Inspection micro-particle boost
+    if (vCoreInspection > 0.01) {
+      // Enhance contrast and reveal subtle micro-dust structures
+      float microLOD = pow(particleCore, 2.0) * (0.15 * vCoreInspection);
+      finalColor += vec3(0.1, 0.08, 0.15) * microLOD;
+    }
 
   } else {
     // ---------------------------------------------------------------
-    // NON-CORE PARTICLES — original rendering with slight refinements
+    // NON-CORE PARTICLES — arm / stream specular highlights
     // ---------------------------------------------------------------
-
-    // Gentle specular highlight for arm/stream particles
     float specular = pow(particleCore, 3.0) * 0.5;
     finalColor += vec3(1.0, 0.95, 0.9) * specular;
   }
+
+  // ---------------------------------------------------------------
+  // PHASE 4: CLICK ENERGY WAVE PHOTONIC FLASH
+  // Adds a luminous crest along the propagating wavefront
+  // ---------------------------------------------------------------
+  if (vPulseFactor > 0.001) {
+    vec3 pulseCrest = mix(vec3(0.4, 0.6, 1.0), vec3(1.0, 0.8, 0.95), sin(vDistance * 6.28) * 0.5 + 0.5);
+    finalColor += pulseCrest * (vPulseFactor * 1.5 * particleCore);
+  }
+
+  // ---------------------------------------------------------------
+  // PHASE 2: PHYSICAL DEPTH PERCEPTION & ATMOSPHERIC PERSPECTIVE FOG
+  // Near particles slightly brighter, far particles gently fade into cosmic depth
+  // ---------------------------------------------------------------
+  float depthBrightness = clamp(1.0 + (35.0 - vDepth) * 0.006, 0.72, 1.25);
+  finalColor *= depthBrightness;
+
+  // Subtle atmospheric perspective depth fog towards deep space
+  float fogFactor = smoothstep(25.0, 85.0, vDepth);
+  vec3 cosmicBackground = vec3(0.008, 0.008, 0.031);
+  finalColor = mix(finalColor, cosmicBackground, fogFactor * 0.35);
 
   // ---------------------------------------------------------------
   // FINAL ALPHA COMPOSITION
@@ -117,7 +141,7 @@ void main() {
   float alpha = shapeAlpha * vAlpha * uIntensity;
 
   // Depth atmospheric attenuation
-  alpha *= clamp(1.2 - vDepth * 0.012, 0.2, 1.0);
+  alpha *= clamp(1.2 - vDepth * 0.010, 0.25, 1.0);
 
   // Core depth modulation: particles farther from camera slightly dimmer
   if (vLayer < 0.5) {

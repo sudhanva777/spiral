@@ -342,3 +342,40 @@ export function generateStarfieldParticles(count: number) {
 
   return { positions, sizes, twinkleSpeeds, twinklePhases, colors };
 }
+
+export function generateForegroundDustParticles(count: number) {
+  const positions = new Float32Array(count * 3);
+  const sizes = new Float32Array(count);
+  const phases = new Float32Array(count);
+  const colors = new Float32Array(count * 3);
+
+  const dustTints = [
+    [0.85, 0.70, 0.95], // Faint violet rose
+    [0.70, 0.85, 1.00], // Soft ice blue
+    [1.00, 0.85, 0.75], // Pale warm peach
+    [0.60, 0.50, 0.90], // Deep lavender
+  ];
+
+  for (let i = 0; i < count; i++) {
+    const i3 = i * 3;
+    // Volumetric shell closer to camera for strong parallax depth
+    const radius = 12.0 + Math.pow(Math.random(), 0.7) * 42.0;
+    const theta = Math.random() * Math.PI * 2.0;
+    const phi = (Math.random() - 0.5) * Math.PI * 0.85;
+
+    positions[i3] = radius * Math.cos(phi) * Math.cos(theta);
+    positions[i3 + 1] = radius * Math.sin(phi) * 0.6 + randomGaussian(0, 4.0);
+    positions[i3 + 2] = radius * Math.cos(phi) * Math.sin(theta);
+
+    // Foreground dust particles are slightly larger and softer
+    sizes[i] = 1.2 + Math.random() * 2.2;
+    phases[i] = Math.random() * Math.PI * 2.0;
+
+    const tint = dustTints[Math.floor(Math.random() * dustTints.length)];
+    colors[i3] = tint[0];
+    colors[i3 + 1] = tint[1];
+    colors[i3 + 2] = tint[2];
+  }
+
+  return { positions, sizes, phases, colors };
+}

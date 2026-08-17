@@ -11,9 +11,10 @@ import {
   Info,
   ChevronUp,
   ChevronDown,
-  RotateCcw
+  RotateCcw,
+  Crosshair
 } from 'lucide-react';
-import type { GalaxyPreset, QualityTier, SimulationStats } from '../types/simulation';
+import type { GalaxyPreset, InteractionState, QualityTier, SimulationStats } from '../types/simulation';
 import { soundSynthesizer } from './SoundSynthesizer';
 
 export const GALAXY_PRESETS: GalaxyPreset[] = [
@@ -92,22 +93,28 @@ export const GALAXY_PRESETS: GalaxyPreset[] = [
 interface MinimalHUDProps {
   stats: SimulationStats;
   currentPreset: GalaxyPreset;
+  interactionState?: InteractionState;
   onSelectPreset: (preset: GalaxyPreset) => void;
   onSelectQuality: (tier: QualityTier) => void;
   onResetCamera?: () => void;
+  onToggleCoreInspection?: () => void;
 }
 
 export const MinimalHUD: React.FC<MinimalHUDProps> = ({
   stats,
   currentPreset,
+  interactionState = 'EXPLORING',
   onSelectPreset,
   onSelectQuality,
   onResetCamera,
+  onToggleCoreInspection,
 }) => {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isControlsExpanded, setIsControlsExpanded] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+
+  const isCoreInspecting = interactionState === 'CORE_INSPECTION' || interactionState === 'CORE_TRANSITION';
 
   const handleToggleAudio = () => {
     const playing = soundSynthesizer.toggle();
@@ -135,7 +142,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           </div>
           <div className="brand-text">
             <h1 className="brand-title">A E T H E R // V O R T E X</h1>
-            <span className="brand-sub">SIMULATION ENGINE V2.6 • THREE.JS / GLSL</span>
+            <span className="brand-sub">3D GALAXY SIMULATION ENGINE • THREE.JS / GLSL</span>
           </div>
         </div>
 
@@ -158,18 +165,27 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
             <span className="chip-label">DIST</span>
             <span className="chip-val">{stats.cameraDistance} AU</span>
           </div>
+
+          {isCoreInspecting && (
+            <div className="telemetry-chip active-core-chip">
+              <Crosshair className="chip-icon text-pink-300 animate-pulse" />
+              <span className="chip-label text-pink-300">CORE INSPECTION</span>
+            </div>
+          )}
         </div>
 
         {/* Global Action Buttons */}
         <div className="hud-actions pointer-events-auto">
-          <button
-            onClick={() => setShowInfo(!showInfo)}
-            className={`hud-btn ${showInfo ? 'active' : ''}`}
-            title="Simulation Architecture"
-            aria-label="Simulation Architecture"
-          >
-            <Info className="w-4 h-4" />
-          </button>
+          {onToggleCoreInspection && (
+            <button
+              onClick={onToggleCoreInspection}
+              className={`hud-btn ${isCoreInspecting ? 'active ring-1 ring-pink-400' : ''}`}
+              title={isCoreInspecting ? "Exit Core Inspection (C)" : "Inspect Core Up Close (C / Double Click)"}
+              aria-label="Core Inspection"
+            >
+              <Crosshair className={`w-4 h-4 ${isCoreInspecting ? 'text-pink-300' : ''}`} />
+            </button>
+          )}
 
           {onResetCamera && (
             <button
@@ -181,6 +197,15 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
               <RotateCcw className="w-4 h-4" />
             </button>
           )}
+
+          <button
+            onClick={() => setShowInfo(!showInfo)}
+            className={`hud-btn ${showInfo ? 'active' : ''}`}
+            title="Simulation Architecture & Controls"
+            aria-label="Simulation Architecture"
+          >
+            <Info className="w-4 h-4" />
+          </button>
 
           <button
             onClick={handleToggleAudio}
@@ -206,27 +231,32 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
       {showInfo && (
         <div className="hud-info-modal pointer-events-auto">
           <div className="modal-header">
-            <h3>Cosmic Simulation Architecture</h3>
+            <h3>Cosmic Simulation Architecture & 3D Controls</h3>
             <button onClick={() => setShowInfo(false)} className="close-btn">×</button>
           </div>
           <div className="modal-body">
             <p>
-              <strong>GPU Particle Pipeline:</strong> Over 250,000+ procedural particles rendered simultaneously via custom GLSL vertex & fragment shaders with GPU curl-noise turbulence.
+              <strong>3D Orbital Exploration:</strong> Full 360° horizontal and vertical orbit with continuous smooth zoom and volumetric depth perception.
             </p>
             <p>
-              <strong>Gravitational Distortion:</strong> Cursor movement projects a 3D raycast vector onto the accretion plane, creating dynamic gravitational lensing and orbital bending.
+              <strong>GPU Particle Pipeline:</strong> Over 250,000+ procedural particles rendered across 4 multi-scale layers with atmospheric perspective and foreground dust parallax.
             </p>
             <p>
-              <strong>Post-Processing:</strong> Half-float UnrealBloomPass with custom dark-space vignette and filmic tone-mapping.
+              <strong>Relativistic Gravitational Field:</strong> Cursor movement creates dynamic spacetime warping, localized attraction, and frame-dragging swirl with natural temporal recovery.
+            </p>
+            <p>
+              <strong>Propagating Energy Wave:</strong> Clicking the galaxy triggers a radiating spherical wavefront through the particle field with localized vertical and photonic displacement.
             </p>
             <div className="modal-interaction-guide">
               <h4>Navigation Controls</h4>
               <ul>
-                <li><span>Left-Click Drag</span> Orbit around galaxy</li>
-                <li><span>Right-Click Drag</span> Pan viewpoint</li>
-                <li><span>Scroll Wheel</span> Smooth zoom in / out</li>
-                <li><span>Move Cursor</span> Gravitational attraction</li>
-                <li><span>R Key</span> Reset to default view</li>
+                <li><span>Left-Click Drag</span> Orbit 360° around galaxy</li>
+                <li><span>Right-Click Drag</span> Pan camera viewpoint (or 2-finger drag on mobile)</li>
+                <li><span>Scroll Wheel</span> Smooth continuous zoom in / out (pinch on mobile)</li>
+                <li><span>Cursor Move</span> Spacetime gravitational lensing</li>
+                <li><span>Click Galaxy</span> Radiating energy wave pulse</li>
+                <li><span>Double-Click Core</span> Toggle close Core Inspection mode (or C key)</li>
+                <li><span>R Key / Reset</span> Smooth cinematic return to default view</li>
               </ul>
             </div>
           </div>
@@ -238,7 +268,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
         {/* Interaction Hint Badge */}
         <div className="interaction-hint pointer-events-auto">
           <div className="pulse-dot" />
-          <span>DRAG — ORBIT • SCROLL — ZOOM • RIGHT-DRAG — PAN • R — RESET VIEW</span>
+          <span>DRAG — 360° ORBIT • SCROLL — ZOOM • CLICK — ENERGY WAVE • DBL-CLICK CORE — INSPECT • R — RESET</span>
         </div>
 
         {/* Floating Preset Selector Drawer */}

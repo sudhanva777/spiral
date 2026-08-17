@@ -45,6 +45,12 @@ export class GalaxyParticles {
         uCoreGlowSize: { value: 1.0 },
         uIntensity: { value: 1.0 },
         uCoreFalloff: { value: 6.5 },
+        // Phase 4: Energy Wave Pulse Uniforms
+        uPulseOrigin: { value: new THREE.Vector3(0, 0, 0) },
+        uPulseProgress: { value: 0.0 },
+        uPulseStrength: { value: 0.0 },
+        // Phase 5: Core Inspection LOD Uniform
+        uCoreInspection: { value: 0.0 },
       },
     });
 
@@ -56,12 +62,23 @@ export class GalaxyParticles {
     time: number,
     mousePos3D: THREE.Vector3,
     entranceProgress: number,
-    mouseInfluence = 0.5
+    mouseInfluence = 0.5,
+    pulseOrigin?: THREE.Vector3,
+    pulseProgress = 0.0,
+    pulseStrength = 0.0,
+    coreInspection = 0.0
   ) {
     this.material.uniforms.uTime.value = time;
     this.material.uniforms.uMousePos3D.value.copy(mousePos3D);
     this.material.uniforms.uEntranceProgress.value = entranceProgress;
     this.material.uniforms.uMouseInfluence.value = mouseInfluence;
+
+    if (pulseOrigin) {
+      this.material.uniforms.uPulseOrigin.value.copy(pulseOrigin);
+    }
+    this.material.uniforms.uPulseProgress.value = pulseProgress;
+    this.material.uniforms.uPulseStrength.value = pulseStrength;
+    this.material.uniforms.uCoreInspection.value = coreInspection;
   }
 
   public applyPreset(preset: GalaxyPreset) {
