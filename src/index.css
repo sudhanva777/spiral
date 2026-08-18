@@ -1086,5 +1086,142 @@ html, body, #root {
   }
 }
 
+/* ==========================================================================
+   IC 1579 DEEP EXPLORATION HUD — discovery tags, surface mode, day/night
+   ========================================================================== */
+
+.active-surface-chip {
+  border-color: rgba(52, 211, 153, 0.45);
+  background: rgba(16, 185, 129, 0.14);
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin-slow {
+  animation: spin-slow 9s linear infinite;
+}
+
+/* Discovery classification banner (active star system tag) */
+.discovery-banner {
+  position: absolute;
+  top: 7.1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(6, 30, 24, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  border-radius: 10px;
+  padding: 0.42rem 1rem;
+  box-shadow: 0 0 22px rgba(16, 185, 129, 0.2);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+}
+
+.discovery-label {
+  font-weight: 700;
+  color: #a7f3d0;
+}
+
+.discovery-divider {
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.discovery-tag {
+  font-weight: 700;
+}
+
+.discovery-tag-chip {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.16);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  padding: 0.1rem 0.38rem;
+  border-radius: 4px;
+  margin-left: 0.4rem;
+}
+
+/* Surface mode banner (Aurelia) */
+.surface-banner {
+  position: absolute;
+  top: 4.8rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: rgba(4, 26, 20, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(52, 211, 153, 0.5);
+  border-radius: 12px;
+  padding: 0.65rem 1.25rem;
+  box-shadow: 0 0 28px rgba(16, 185, 129, 0.3);
+}
+
+.surface-banner-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.surface-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #6ee7b7;
+}
+
+.surface-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  color: #86efac;
+  opacity: 0.85;
+}
+
+.surface-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: 0.5rem;
+}
+
+.surface-descend-btn {
+  border-color: rgba(52, 211, 153, 0.5) !important;
+  color: #6ee7b7 !important;
+}
+
+.surface-descend-btn:hover {
+  background: rgba(16, 185, 129, 0.18) !important;
+}
+
+.landable-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  padding: 0.1rem 0.38rem;
+  border-radius: 4px;
+  margin-left: 0.35rem;
+}
+
 
 

@@ -125,6 +125,18 @@ export const CanvasContainer: React.FC = () => {
     }
   };
 
+  const handleDescendToSurface = () => {
+    if (engineRef.current) {
+      engineRef.current.descendToSurface();
+    }
+  };
+
+  const handleExitSurface = () => {
+    if (engineRef.current) {
+      engineRef.current.exitSurface();
+    }
+  };
+
   if (!hasWebGL) {
     return <WebGLFallback />;
   }
@@ -150,6 +162,8 @@ export const CanvasContainer: React.FC = () => {
         onSelectMoon={handleSelectMoon}
         onExitStarSystem={handleExitStarSystem}
         onSetTimeScale={handleSetTimeScale}
+        onDescendToSurface={handleDescendToSurface}
+        onExitSurface={handleExitSurface}
       />
     </div>
   );

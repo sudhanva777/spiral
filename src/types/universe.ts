@@ -61,7 +61,8 @@ export interface GalaxyMorphology {
     | 'asymmetric-broken'
     | 'multi-arm-grand'
     | 'grand-design'
-    | 'elliptical';
+    | 'elliptical'
+    | 'ic1579-emerald-spiral';
   armCount: number;
   asymmetry: number;
   barStrength: number;
@@ -94,6 +95,23 @@ export interface GalaxyConfig {
   blackHoleConfig?: BlackHoleConfig;
   palette: GalaxyPalette;
   morphology: GalaxyMorphology;
+  isSpecialGalaxy?: boolean; // IC 1579 designation
+}
+
+export type ScaleLevel =
+  | 'COSMOS'
+  | 'GALAXY'
+  | 'STELLAR'
+  | 'PLANETARY'
+  | 'ATMOSPHERE'
+  | 'SURFACE'
+  | 'NIGHT_SKY';
+
+export interface SurfaceState {
+  isLanded: boolean;
+  timeOfDay: number; // 0.0 to 1.0 (0=Midnight, 0.25=Sunrise, 0.5=Noon, 0.75=Sunset)
+  lookingAtSky: boolean;
+  altitude: number; // 0.0 (ground) to 1.0 (upper atmosphere)
 }
 
 export interface UniverseState {
@@ -109,4 +127,8 @@ export interface UniverseState {
   detectedSystemId?: string | null;
   detectedSystemName?: string | null;
   timeScale?: number;
+  scaleLevel?: ScaleLevel;
+  surfaceState?: SurfaceState;
+  discoveredFeatures?: string[];
+  activeDiscoveryTag?: string | null;
 }

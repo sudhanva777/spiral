@@ -49,6 +49,43 @@ export interface AsteroidBeltConfig {
   inclination?: number;
 }
 
+// ============================================================================
+// IC 1579 DEEP EXPLORATION EXTENSIONS
+// ============================================================================
+
+// Dyson-style swarm of orbital energy collectors around a star.
+export interface DysonSwarmConfig {
+  id: string;
+  name: string;
+  innerRadius: number;
+  outerRadius: number;
+  collectorCount: number;
+  panelColor: string;
+  glowColor: string;
+  orbitTilt: [number, number, number];
+  rotationSpeed: number;
+  thermalGlow: number;
+}
+
+// 4D-inspired tesseract projection world (mathematically coherent projections,
+// not a literal fourth spatial dimension).
+export interface TesseractConfig {
+  projectionScale: number;
+  color: string;
+  secondaryColor: string;
+  rotationSpeed: number;
+  anomalyStrength: number;
+}
+
+export type StarSystemDiscoveryTag =
+  | 'flagship'
+  | 'dyson'
+  | 'tesseract'
+  | 'sentinel'
+  | 'halo-remnant'
+  | 'core-vicinity'
+  | null;
+
 export interface PlanetConfig {
   id: string;
   name: string;
@@ -75,6 +112,12 @@ export interface PlanetConfig {
   moons?: MoonConfig[];
   hasLocalAsteroids?: boolean;
   localAsteroidCount?: number;
+  // IC 1579: tesseract-projection anomaly world
+  tesseract?: TesseractConfig;
+  // IC 1579: flagship world receiving the deepest surface experience
+  isFlagship?: boolean;
+  // IC 1579: planet supports atmospheric descent / surface exploration
+  surfaceExplore?: boolean;
 }
 
 export interface StarConfig {
@@ -102,6 +145,11 @@ export interface StarSystemConfig {
   planets: PlanetConfig[];
   systemRadius: number;
   asteroidBelt?: AsteroidBeltConfig;
+  // IC 1579: Dyson swarm megastructure orbiting this star
+  dysonSwarm?: DysonSwarmConfig;
+  // IC 1579: discovery classification surfaced in the HUD
+  discoveryTag?: StarSystemDiscoveryTag;
+  discoveryTitle?: string;
 }
 
 export type StarSystemLOD =

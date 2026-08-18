@@ -5,28 +5,33 @@ import { BlackHoleSystem } from './effects/BlackHoleSystem';
 import { StarSystemManager } from '../starsystems/StarSystemManager';
 import type { GalaxyConfig } from '../../types/universe';
 import type { GalaxyPreset } from '../../types/simulation';
+import { PRIME_GALAXY_STAR_SYSTEMS } from '../starsystems/starSystemRegistry';
+import { IC1579_STAR_SYSTEMS } from '../starsystems/ic1579StarSystems';
 
 function getParticleCountForGalaxy(config: GalaxyConfig, totalUniverseParticles: number): number {
   switch (config.id) {
     case 'galaxy06':
       // Galaxy 06 (Aetheris): Monumental centerpiece with highest particle density
-      return Math.round(totalUniverseParticles * 0.26);
+      return Math.round(totalUniverseParticles * 0.24);
+    case 'galaxy17':
+      // Galaxy 17 (IC 1579): Special deep exploration galaxy with high particle density
+      return Math.round(totalUniverseParticles * 0.2);
     case 'galaxy05':
       // Galaxy 05 (Red Veil): Dense energetic starburst galaxy
-      return Math.round(totalUniverseParticles * 0.18);
+      return Math.round(totalUniverseParticles * 0.16);
     case 'galaxy04':
       // Galaxy 04 (Eclipse): High-contrast dense golden storm
-      return Math.round(totalUniverseParticles * 0.18);
+      return Math.round(totalUniverseParticles * 0.16);
     case 'galaxy03':
       // Galaxy 03 (Verdant): Deep multi-layered emerald ecosystem
-      return Math.round(totalUniverseParticles * 0.18);
+      return Math.round(totalUniverseParticles * 0.16);
     case 'galaxy02':
       // Galaxy 02 (Ignis Vesper): Flocculent ring
-      return Math.round(totalUniverseParticles * 0.14);
+      return Math.round(totalUniverseParticles * 0.12);
     case 'galaxy01':
     default:
       // Galaxy 01 (Aether Prime): Baseline reference quality preserved
-      return Math.round(totalUniverseParticles * 0.14);
+      return Math.round(totalUniverseParticles * 0.12);
   }
 }
 
@@ -60,7 +65,7 @@ export class GalaxyInstance {
     this.particles = new GalaxyParticles(count, config);
     this.group.add(this.particles.points);
 
-    // Modular Living Supermassive Black Hole System (Galaxies 02-16)
+    // Modular Living Supermassive Black Hole System (Galaxies 02-16, 17)
     if (config.hasBlackHole && config.blackHoleConfig) {
       const bhParticles = Math.min(Math.max(Math.round(count * 0.08), 5500), 9500);
       this.blackHole = new BlackHoleSystem(config.blackHoleConfig, bhParticles);
@@ -74,9 +79,12 @@ export class GalaxyInstance {
       this.group.add(this.energyJets.points);
     }
 
-    // Hierarchical Planetary Star Systems (Phase 1: Galaxy 01 / Prime Galaxy)
+    // Hierarchical Planetary Star Systems (Phase 1: Galaxy 01 / Prime Galaxy, Phase 2: IC 1579)
     if (config.id === 'galaxy01') {
-      this.starSystems = new StarSystemManager();
+      this.starSystems = new StarSystemManager(PRIME_GALAXY_STAR_SYSTEMS);
+      this.group.add(this.starSystems.group);
+    } else if (config.id === 'galaxy17') {
+      this.starSystems = new StarSystemManager(IC1579_STAR_SYSTEMS);
       this.group.add(this.starSystems.group);
     }
   }

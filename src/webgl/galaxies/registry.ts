@@ -1,42 +1,9 @@
 import type { GalaxyConfig, GalaxyGroupInfo } from '../../types/universe';
 
 // ============================================================================
-// COSMIC GALAXY GROUPS DEFINITION
+// COSMIC GALAXY GROUPS DEFINITION (see full registry below — groups are
+// declared after all galaxy configs to include the IC 1579 special galaxy)
 // ============================================================================
-export const COSMIC_GROUPS: GalaxyGroupInfo[] = [
-  {
-    id: 'groupA',
-    name: 'Local Cluster',
-    designation: 'GROUP ALPHA // PRIME SECTOR',
-    center: [-70, -15, -15],
-    description: 'The ancient primordial galaxy group harboring the baseline spiral Aether Prime and the deep emerald ecosystem of Verdant.',
-    galaxyIds: ['galaxy01', 'galaxy03', 'galaxy07', 'galaxy10'],
-  },
-  {
-    id: 'groupB',
-    name: 'Southern Stream',
-    designation: 'GROUP BETA // SOUTHERN STREAM',
-    center: [160, -20, 180],
-    description: 'A warm, dynamically energetic stream of ringed and flocculent spirals radiating intense crimson, gold, and turquoise emission.',
-    galaxyIds: ['galaxy02', 'galaxy05', 'galaxy08', 'galaxy13'],
-  },
-  {
-    id: 'groupC',
-    name: 'Abyssal Ridge',
-    designation: 'GROUP GAMMA // ABYSSAL RIDGE',
-    center: [-80, 50, -260],
-    description: 'High-contrast sector bounded by deep cosmic voids, featuring heavy golden dust lanes, broken asymmetric arms, and lime gaseous structures.',
-    galaxyIds: ['galaxy04', 'galaxy09', 'galaxy12', 'galaxy15'],
-  },
-  {
-    id: 'groupD',
-    name: 'Celestial Forges',
-    designation: 'GROUP DELTA // CELESTIAL PILLARS',
-    center: [240, 35, -155],
-    description: 'The monumental core cluster of the cosmic web, dominated by the supermassive centerpiece Aetheris with its dual relativistic energy jets.',
-    galaxyIds: ['galaxy06', 'galaxy11', 'galaxy14', 'galaxy16'],
-  },
-];
 
 // ============================================================================
 // GROUP A: LOCAL CLUSTER (Galaxies 01, 03, 07, 10)
@@ -1027,7 +994,111 @@ export const GALAXY_16_CONFIG: GalaxyConfig = {
 };
 
 // ============================================================================
-// FULL UNIVERSE REGISTRY — ALL 16 GALAXIES
+// GROUP E: IC 1579 — THE SPECIAL DEEP EXPLORATION GALAXY
+// ============================================================================
+export const IC1579_CONFIG: GalaxyConfig = {
+  id: 'galaxy17',
+  name: 'IC 1579',
+  subtitle: 'Emerald Deep-Spiral • Living Ecosystem',
+  description: 'An ancient emerald spiral galaxy harboring a supermassive black hole, a Dyson swarm megastructure, a tesseract-projection world, and a flagship ringed oceanic planet. The only galaxy in the cosmos where deep exploration reaches from galactic core to planetary surface and back to the night sky.',
+  type: 'ic1579-emerald-spiral',
+  groupId: 'groupA',
+  position: [-25, 8, -12],
+  rotation: [0.12, -0.08, 0.05],
+  scale: 1.15,
+  speed: 0.22,
+  turbulence: 0.75,
+  boundingRadius: 52.0,
+  hasBlackHole: true,
+  specialEffect: null,
+  isSpecialGalaxy: true,
+  blackHoleConfig: {
+    eventHorizonRadius: 1.35,
+    photonRingRadius: 1.95,
+    accretionInnerRadius: 2.1,
+    accretionOuterRadius: 10.5,
+    diskTilt: [-0.15, 0.25, 0.12],
+    rotationSpeed: 1.8,
+    infallRate: 1.25,
+    turbulence: 0.7,
+    lensingStrength: 1.25,
+    palette: {
+      horizonRim: '#8FFFC1',
+      photonRing: '#D8FFE8',
+      accretionInner: '#28C7A5',
+      accretionMid: '#0FA66B',
+      accretionOuter: '#04281C',
+      infallStream: '#A7FF5A',
+    },
+  },
+  palette: {
+    core: '#F5FFF8',
+    coreHalo: '#D8FFE8',
+    inner: '#8FFFC1',
+    deep: '#14B8A6',
+    armsPrimary: '#0FA66B',
+    armsSecondary: '#075C3D',
+    armsTertiary: '#04281C',
+    dust: '#011509',
+    dustSecondary: '#052E16',
+    starFormation: '#84CC16',
+    starFormationWarm: '#BEF264',
+    ambientStars: ['#D8FFE8', '#8FFFC1', '#5EEAD4', '#14B8A6', '#0FA66B'],
+  },
+  morphology: {
+    type: 'ic1579-emerald-spiral',
+    armCount: 3,
+    asymmetry: 0.35,
+    barStrength: 0.25,
+    ringStrength: 0.2,
+    diskFlattening: 0.5,
+    coreDensity: 1.2,
+    dustDensity: 1.4,
+    verticalThickness: 1.5,
+    starFormationDensity: 1.3,
+    spiralTightness: 3.5,
+    darkLaneStrength: 0.8,
+    voidStrength: 0.4,
+  },
+};
+
+export const COSMIC_GROUPS: GalaxyGroupInfo[] = [
+  {
+    id: 'groupA',
+    name: 'Local Cluster',
+    designation: 'GROUP ALPHA // PRIME SECTOR',
+    center: [-70, -15, -15],
+    description: 'The ancient primordial galaxy group harboring the baseline spiral Aether Prime, the deep emerald ecosystem of Verdant, and the living IC 1579 ecosystem.',
+    galaxyIds: ['galaxy01', 'galaxy03', 'galaxy07', 'galaxy10', 'galaxy17'],
+  },
+  {
+    id: 'groupB',
+    name: 'Southern Stream',
+    designation: 'GROUP BETA // SOUTHERN STREAM',
+    center: [160, -20, 180],
+    description: 'A warm, dynamically energetic stream of ringed and flocculent spirals radiating intense crimson, gold, and turquoise emission.',
+    galaxyIds: ['galaxy02', 'galaxy05', 'galaxy08', 'galaxy13'],
+  },
+  {
+    id: 'groupC',
+    name: 'Abyssal Ridge',
+    designation: 'GROUP GAMMA // ABYSSAL RIDGE',
+    center: [-80, 50, -260],
+    description: 'High-contrast sector bounded by deep cosmic voids, featuring heavy golden dust lanes, broken asymmetric arms, and lime gaseous structures.',
+    galaxyIds: ['galaxy04', 'galaxy09', 'galaxy12', 'galaxy15'],
+  },
+  {
+    id: 'groupD',
+    name: 'Celestial Forges',
+    designation: 'GROUP DELTA // CELESTIAL PILLARS',
+    center: [240, 35, -155],
+    description: 'The monumental core cluster of the cosmic web, dominated by the supermassive centerpiece Aetheris with its dual relativistic energy jets.',
+    galaxyIds: ['galaxy06', 'galaxy11', 'galaxy14', 'galaxy16'],
+  },
+];
+
+// ============================================================================
+// FULL UNIVERSE REGISTRY — ALL 17 GALAXIES (16 + IC 1579)
 // ============================================================================
 export const UNIVERSE_GALAXIES: GalaxyConfig[] = [
   GALAXY_01_CONFIG,
@@ -1046,6 +1117,7 @@ export const UNIVERSE_GALAXIES: GalaxyConfig[] = [
   GALAXY_14_CONFIG,
   GALAXY_15_CONFIG,
   GALAXY_16_CONFIG,
+  IC1579_CONFIG,
 ];
 
 export function getGalaxyConfigById(id: string): GalaxyConfig {

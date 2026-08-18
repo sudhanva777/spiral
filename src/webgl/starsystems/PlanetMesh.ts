@@ -198,6 +198,30 @@ export class PlanetMesh {
     return target;
   }
 
+  private surfaceModeActive = false;
+
+  public setSurfaceMode(active: boolean) {
+    this.surfaceModeActive = active;
+    this.surfaceMesh.visible = !active;
+    if (this.cloudMesh) this.cloudMesh.visible = !active;
+    if (this.atmosphereMesh) this.atmosphereMesh.visible = !active;
+    if (this.ringMesh) this.ringMesh.visible = !active;
+  }
+
+  public isSurfaceMode(): boolean {
+    return this.surfaceModeActive;
+  }
+
+  public setSurfaceBlend(camDistR: number) {
+    // Fade the real planet shell out as the camera drops below the cloud deck
+    const hide = THREE.MathUtils.smoothstep(1.5, 1.1, camDistR);
+    const visible = !this.surfaceModeActive && hide > 0.5;
+    this.surfaceMesh.visible = visible;
+    if (this.cloudMesh) this.cloudMesh.visible = visible;
+    if (this.atmosphereMesh) this.atmosphereMesh.visible = visible;
+    if (this.ringMesh) this.ringMesh.visible = visible;
+  }
+
   public dispose() {
     this.surfaceMesh.geometry.dispose();
     this.surfaceMaterial.dispose();

@@ -1,4 +1,5 @@
 import type { StarSystemConfig } from '../../types/starSystem';
+import { getIC1579StarSystemById, IC1579_STAR_SYSTEMS } from './ic1579StarSystems';
 
 export const PRIME_GALAXY_STAR_SYSTEMS: StarSystemConfig[] = [
   // ==========================================================================
@@ -1045,5 +1046,14 @@ export const PRIME_GALAXY_STAR_SYSTEMS: StarSystemConfig[] = [
 ];
 
 export function getStarSystemById(systemId: string): StarSystemConfig | undefined {
-  return PRIME_GALAXY_STAR_SYSTEMS.find((sys) => sys.id === systemId);
+  return (
+    PRIME_GALAXY_STAR_SYSTEMS.find((sys) => sys.id === systemId) ??
+    getIC1579StarSystemById(systemId)
+  );
+}
+
+export function getStarSystemsForGalaxy(galaxyId: string): StarSystemConfig[] {
+  if (galaxyId === 'galaxy01') return PRIME_GALAXY_STAR_SYSTEMS;
+  if (galaxyId === 'galaxy17') return IC1579_STAR_SYSTEMS;
+  return [];
 }

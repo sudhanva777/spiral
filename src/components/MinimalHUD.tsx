@@ -25,8 +25,34 @@ import {
 import type { GalaxyPreset, InteractionState, QualityTier, SimulationStats } from '../types/simulation';
 import type { UniverseState } from '../types/universe';
 import { UNIVERSE_GALAXIES, getGalaxyConfigById } from '../webgl/galaxies/registry';
-import { PRIME_GALAXY_STAR_SYSTEMS, getStarSystemById } from '../webgl/starsystems/starSystemRegistry';
+import { PRIME_GALAXY_STAR_SYSTEMS, getStarSystemById, getStarSystemsForGalaxy } from '../webgl/starsystems/starSystemRegistry';
 import { soundSynthesizer } from './SoundSynthesizer';
+
+const DISCOVERY_TAG_LABEL: Record<string, { label: string; color: string }> = {
+  flagship: { label: 'FLAGSHIP // RINGED OCEANIC WORLD', color: 'text-emerald-300' },
+  dyson: { label: 'DYSON SWARM MEGASTRUCTURE', color: 'text-teal-300' },
+  tesseract: { label: 'TESSERACT-PROJECTION ANOMALY', color: 'text-cyan-300' },
+  sentinel: { label: 'SENTINEL // BLUE-WHITE GIANT', color: 'text-blue-300' },
+  'halo-remnant': { label: 'HALO REMNANT', color: 'text-lime-300' },
+  'core-vicinity': { label: 'BLACK HOLE VICINITY', color: 'text-emerald-200' },
+};
+
+function timeOfDayLabel(t: number): string {
+  const tiers: Array<[number, string]> = [
+    [0.8125, 'NIGHT'],
+    [0.6875, 'DUSK'],
+    [0.5625, 'AFTERNOON'],
+    [0.4375, 'NOON'],
+    [0.3125, 'MORNING'],
+    [0.1875, 'DAWN'],
+    [0.0625, 'MIDNIGHT'],
+    [-Infinity, 'NIGHT'],
+  ];
+  for (const [min, label] of tiers) {
+    if (t >= min) return label;
+  }
+  return 'NIGHT';
+}
 
 export const GALAXY_PRESETS: GalaxyPreset[] = [
   {
@@ -116,6 +142,8 @@ interface MinimalHUDProps {
   onSelectMoon?: (systemId: string, planetId: string, moonId: string) => void;
   onExitStarSystem?: () => void;
   onSetTimeScale?: (scale: number) => void;
+  onDescendToSurface?: () => void;
+  onExitSurface?: () => void;
 }
 
 export const MinimalHUD: React.FC<MinimalHUDProps> = ({
@@ -137,6 +165,8 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
   onSelectMoon,
   onExitStarSystem,
   onSetTimeScale,
+  onDescendToSurface,
+  onExitSurface,
 }) => {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -162,11 +192,17 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
       : undefined;
 
   const isPrimeGalaxy = universeState.activeGalaxyId === 'galaxy01';
+  const isIC1579 = universeState.activeGalaxyId === 'galaxy17';
   const showDetectedPrompt =
     universeState.detectedSystemId &&
     universeState.detectedSystemId !== dismissedPromptSystemId &&
     !universeState.activeSystemId &&
     !universeState.isNavigating;
+
+  const isOnSurface = !!universeState.surfaceState;
+  const surfaceTime = universeState.surfaceState?.timeOfDay ?? 0;
+  const activeDiscoveryTag = universeState.activeDiscoveryTag;
+  const discoveryInfo = activeDiscoveryTag ? DISCOVERY_TAG_LABEL[activeDiscoveryTag] : undefined;
 
   const timeScale = universeState.timeScale !== undefined ? universeState.timeScale : 1.0;
 
@@ -208,7 +244,9 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           <div className="brand-text">
             <h1 className="brand-title">A E T H E R // D E E P &nbsp; S P A C E</h1>
             <span className="brand-sub">
-              {activeMoon
+              {isOnSurface
+                ? `AURELIA SURFACE • NIGHT SKY STREAMS FROM ${activeGalaxy.name.toUpperCase()}`
+                : activeMoon
                 ? `${activeMoon.name.toUpperCase()} • ${activeMoon.subtitle.toUpperCase()}`
                 : activePlanet
                 ? `${activePlanet.name.toUpperCase()} • ${activePlanet.subtitle.toUpperCase()}`
@@ -283,6 +321,16 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
               <span className="breadcrumb-leaf text-amber-300 animate-pulse">
                 <Moon className="w-3.5 h-3.5 mr-1 text-amber-300 inline" />
                 {activeMoon.name.toUpperCase()}
+              </span>
+            </>
+          )}
+
+          {isOnSurface && (
+            <>
+              <span className="breadcrumb-separator">&gt;</span>
+              <span className="breadcrumb-leaf text-emerald-300 animate-pulse">
+                <Globe2 className="w-3.5 h-3.5 mr-1 text-emerald-300 inline" />
+                SURFACE // {timeOfDayLabel(surfaceTime)}
               </span>
             </>
           )}
@@ -365,6 +413,15 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           {universeState.isNavigating && (
             <div className="telemetry-chip active-warp-chip">
               <span className="chip-label text-blue-300 animate-pulse">WARPING THROUGH SPACE</span>
+            </div>
+          )}
+
+          {isOnSurface && (
+            <div className="telemetry-chip active-surface-chip">
+              <Sun className={`chip-icon animate-spin-slow ${surfaceTime >= 0.1875 && surfaceTime < 0.8125 ? 'text-amber-300' : 'text-indigo-300'}`} />
+              <span className={`chip-label ${surfaceTime >= 0.1875 && surfaceTime < 0.8125 ? 'text-amber-300' : 'text-indigo-300'}`}>
+                {timeOfDayLabel(surfaceTime)} // AURELIA LOCAL DAY {(surfaceTime * 24).toFixed(1)}H
+              </span>
             </div>
           )}
         </div>
@@ -480,6 +537,36 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
         </div>
       )}
 
+      {/* Discovery Classification Banner (IC 1579 deep-exploration systems) */}
+      {activeSystem && discoveryInfo && !isOnSurface && (
+        <div className={`discovery-banner pointer-events-auto animate-fade-in ${discoveryInfo.color}`}>
+          <Sparkles className="w-4 h-4 mr-2 animate-pulse" />
+          <span className="discovery-label">CLASSIFIED // {activeSystem.name.toUpperCase()}</span>
+          <span className="discovery-divider" />
+          <span className="discovery-tag">{discoveryInfo.label}</span>
+        </div>
+      )}
+
+      {/* Surface Mode Banner (Aurelia — the night sky IS IC 1579) */}
+      {isOnSurface && (
+        <div className="surface-banner pointer-events-auto animate-fade-in">
+          <div className="surface-banner-row">
+            <Sun className="w-4 h-4 mr-2 text-amber-300" />
+            <span className="surface-title">AURELIA SURFACE // {timeOfDayLabel(surfaceTime)}</span>
+            <span className="surface-sub">
+              LOCAL DAY {(surfaceTime * 24).toFixed(1)}H • NIGHT SKY STREAMS FROM IC 1579
+            </span>
+          </div>
+          <div className="surface-banner-actions">
+            {onExitSurface && (
+              <button onClick={onExitSurface} className="prompt-btn-skip">
+                RETURN TO ORBIT
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Hierarchy Level Explorer Drawer */}
       {activePlanet && activePlanet.moons && activePlanet.moons.length > 0 ? (
         /* Planet & Moon Explorer */
@@ -495,6 +582,12 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
             >
               PLANET OVERVIEW
             </button>
+            {activePlanet.surfaceExplore && !isOnSurface && onDescendToSurface && (
+              <button onClick={onDescendToSurface} className="system-overview-btn surface-descend-btn">
+                <Globe2 className="w-3.5 h-3.5 mr-1.5 text-emerald-300" />
+                DESCEND TO SURFACE
+              </button>
+            )}
           </div>
 
           <div className="galaxy-pills-scroll">
@@ -557,36 +650,57 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
                   <span className="galaxy-nav-num">{(idx + 1).toString().padStart(2, '0')}</span>
                   <span className="galaxy-nav-name">{planet.name}</span>
                   {isEarthLike && <span className="earth-tag">EARTH-ANALOG</span>}
+                  {planet.surfaceExplore && <span className="landable-tag">LANDABLE</span>}
                   {moonCount > 0 && <span className="moon-count-tag">{moonCount}M</span>}
                 </button>
               );
             })}
           </div>
         </nav>
-      ) : isPrimeGalaxy ? (
-        /* Prime Galaxy Star System Quick-Focus Bar */
+      ) : isPrimeGalaxy || isIC1579 ? (
+        /* Populated-Galaxy Star System Quick-Focus Bar (Prime + IC 1579) */
         <nav className="cosmic-navigator-bar pointer-events-auto">
           <div className="system-navigator-header">
-            <span className="system-title-tag text-purple-300">
-              <Sun className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
-              PRIME GALAXY STELLAR SYSTEMS (4 SYSTEMS DISCOVERABLE)
+            <span className={`system-title-tag ${isIC1579 ? 'text-emerald-300' : 'text-purple-300'}`}>
+              <Sparkles className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
+              {isIC1579
+                ? 'IC 1579 EMERALD DEEP-SPIRAL // 10 DISCOVERABLE SYSTEMS'
+                : 'PRIME GALAXY STELLAR SYSTEMS (4 SYSTEMS DISCOVERABLE)'}
             </span>
           </div>
 
           <div className="galaxy-pills-scroll">
-            {PRIME_GALAXY_STAR_SYSTEMS.map((sys, idx) => (
-              <button
-                key={sys.id}
-                onClick={() => onSelectStarSystem && onSelectStarSystem(sys.id)}
-                className="galaxy-nav-pill star-system-pill"
-                title={`Dive into ${sys.name} (${sys.planets.length} Planets)`}
-              >
-                <Sun className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
-                <span className="galaxy-nav-num">SYS-{(idx + 1).toString().padStart(2, '0')}</span>
-                <span className="galaxy-nav-name">{sys.name.split(' ')[0]}</span>
-                <span className="planet-count-tag">{sys.planets.length} WORLDS</span>
-              </button>
-            ))}
+            {(isIC1579 ? getStarSystemsForGalaxy('galaxy17') : PRIME_GALAXY_STAR_SYSTEMS).map((sys, idx) => {
+              const sysTag = isIC1579
+                ? sys.discoveryTag === 'flagship'
+                  ? 'FLAGSHIP'
+                  : sys.discoveryTag === 'dyson'
+                  ? 'DYSON'
+                  : sys.discoveryTag === 'tesseract'
+                  ? 'TESSERACT'
+                  : sys.discoveryTag === 'sentinel'
+                  ? 'SENTINEL'
+                  : sys.discoveryTag === 'halo-remnant'
+                  ? 'HALO'
+                  : sys.discoveryTag === 'core-vicinity'
+                  ? 'CORE'
+                  : undefined
+                : undefined;
+              return (
+                <button
+                  key={sys.id}
+                  onClick={() => onSelectStarSystem && onSelectStarSystem(sys.id)}
+                  className="galaxy-nav-pill star-system-pill"
+                  title={`Dive into ${sys.name} (${sys.planets.length} Planets)`}
+                >
+                  <Sun className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
+                  <span className="galaxy-nav-num">SYS-{(idx + 1).toString().padStart(2, '0')}</span>
+                  <span className="galaxy-nav-name">{sys.name.split(' ')[0]}</span>
+                  {sysTag && <span className={`discovery-tag-chip ${isIC1579 ? 'text-emerald-300' : ''}`}>{sysTag}</span>}
+                  <span className="planet-count-tag">{sys.planets.length} WORLDS</span>
+                </button>
+              );
+            })}
 
             <div className="divider-vertical" />
 
@@ -674,10 +788,12 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
         <div className="interaction-hint pointer-events-auto">
           <div className="pulse-dot" />
           <span>
-            {activeMoon
+            {isOnSurface
+              ? `AURELIA SURFACE // NIGHT SKY = IC 1579 FROM THIS PLANET • DRAG — LOOK AROUND • SCROLL — CLIMB • ESC — RETURN TO ORBIT`
+              : activeMoon
               ? `INSPECTING ${activeMoon.name.toUpperCase()} (MOON OF ${activePlanet?.name.toUpperCase()}) • DRAG — ORBIT • ESC / BACK — EXIT MOON`
               : activePlanet
-              ? `INSPECTING ${activePlanet.name.toUpperCase()} • CLICK MOONS TO DIVE IN • ESC / BACK — EXIT WORLD`
+              ? `INSPECTING ${activePlanet.name.toUpperCase()} • CLICK MOONS TO DIVE IN${activePlanet.surfaceExplore ? ' • DESCEND TO SURFACE FOR THE NIGHT SKY' : ''} • ESC / BACK — EXIT WORLD`
               : activeSystem
               ? `STAR SYSTEM // ${activeSystem.name.toUpperCase()} • CLICK PLANETS TO DIVE IN • ESC / BACK — EXIT TO GALAXY`
               : universeState.detectedBlackHole

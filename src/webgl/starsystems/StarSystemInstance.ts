@@ -4,6 +4,8 @@ import { StarMesh } from './StarMesh';
 import { PlanetMesh } from './PlanetMesh';
 import { OrbitLine } from './OrbitLine';
 import { AsteroidBelt } from './AsteroidBelt';
+import { DysonSwarmSystem } from './DysonSwarmSystem';
+import { TesseractProjection } from './TesseractProjection';
 
 export class StarSystemInstance {
   public config: StarSystemConfig;
@@ -13,6 +15,8 @@ export class StarSystemInstance {
   public orbitLines: OrbitLine[] = [];
   public planetOrbitGroups: THREE.Group[] = [];
   public asteroidBelt?: AsteroidBelt;
+  public dysonSwarm?: DysonSwarmSystem;
+  public tesseract?: TesseractProjection;
 
   public currentLOD: StarSystemLOD = 'GALAXY_POINT';
   public currentDistanceToCamera = 999.0;
@@ -30,6 +34,18 @@ export class StarSystemInstance {
     // 1. Star
     this.starMesh = new StarMesh(config.star);
     this.group.add(this.starMesh.group);
+
+    // 1b. Dyson Swarm (megastructure around the star)
+    if (config.dysonSwarm) {
+      this.dysonSwarm = new DysonSwarmSystem(config.dysonSwarm);
+      this.group.add(this.dysonSwarm.group);
+    }
+
+    // 1c. Tesseract anomaly (4D projection world)
+    const tesseractPlanet = config.planets.find((p) => p.tesseract);
+    if (tesseractPlanet?.tesseract) {
+      this.tesseract = new TesseractProjection(tesseractPlanet.tesseract, tesseractPlanet.radius);
+    }
 
     // 2. Main Asteroid Belt (if configured)
     if (config.asteroidBelt) {
@@ -57,6 +73,15 @@ export class StarSystemInstance {
       this.planets.push(planetMesh);
       orbitGroup.add(planetMesh.group);
     });
+
+    // 3b. Tesseract anomaly rides the tesseract planet's orbit (created after
+    // the planets so it can be parented to the correct planet's group)
+    if (tesseractPlanet?.tesseract && this.tesseract) {
+      const hostPlanet = this.planets.find((p) => p.config.id === tesseractPlanet.id);
+      if (hostPlanet) {
+        hostPlanet.group.add(this.tesseract.group);
+      }
+    }
 
     // 4. Selection Hit Sphere (Invisible, used for raycasting from distance)
     const hitRadius = Math.max(config.star.apparentRadius * 2.5, 1.8);
@@ -92,6 +117,16 @@ export class StarSystemInstance {
 
     // Update Star
     this.starMesh.update(time, camera);
+
+    // Update Dyson Swarm
+    if (this.dysonSwarm) {
+      this.dysonSwarm.update(time, this.currentDistanceToCamera);
+    }
+
+    // Update Tesseract projection
+    if (this.tesseract) {
+      this.tesseract.update(time, this.currentDistanceToCamera);
+    }
 
     // Update Asteroid Belt
     if (this.asteroidBelt) {
@@ -168,8 +203,28 @@ export class StarSystemInstance {
     return closestMoonId ? { moonId: closestMoonId, distance: closestDist } : null;
   }
 
+  private surfaceMode = false;
+
+  public setSurfaceMode(active: boolean) {
+    this.surfaceMode = active;
+    this.starMesh.group.visible = !active;
+    if (this.dysonSwarm) this.dysonSwarm.group.visible = !active;
+    if (this.tesseract) this.tesseract.group.visible = !active;
+    this.hitSphere.visible = !active;
+    this.orbitLines.forEach((o) => {
+      o.line.visible = !active;
+    });
+    if (this.asteroidBelt) this.asteroidBelt.group.visible = !active;
+  }
+
+  public isSurfaceMode(): boolean {
+    return this.surfaceMode;
+  }
+
   public dispose() {
     this.starMesh.dispose();
+    if (this.dysonSwarm) this.dysonSwarm.dispose();
+    if (this.tesseract) this.tesseract.dispose();
     this.planets.forEach((p) => p.dispose());
     this.orbitLines.forEach((o) => o.dispose());
     if (this.asteroidBelt) {
