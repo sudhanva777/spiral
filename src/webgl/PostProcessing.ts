@@ -4,7 +4,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 
-// Composite Gravitational Lensing, Vignette & Deep Cosmic Grading Shader
+// Composite Chromatic Gravitational Lensing, Vignette & Deep Cosmic Grading Shader
 const CosmicCompositeShader = {
   uniforms: {
     tDiffuse: { value: null },
@@ -35,22 +35,49 @@ const CosmicCompositeShader = {
 
     void main() {
       vec2 sampleUv = vUv;
+      vec3 finalTexRgb = vec3(0.0);
+      float finalAlpha = 1.0;
 
       // Relativistic Gravitational Lensing Warp (Light bending around Event Horizon)
       if (uLensActive > 0.01) {
         vec2 delta = (vUv - uLensPos) * vec2(uAspectRatio, 1.0);
         float dist = length(delta);
+        float rEin = uLensRadius;
 
-        if (dist > 0.0001 && dist < uLensRadius * 4.5) {
+        if (dist > 0.0001 && dist < rEin * 5.0) {
           // Gravitational deflection angle ~ Einstein ring radius squared / dist
-          float deflection = (uLensRadius * uLensRadius) / max(dist, uLensRadius * 0.35);
-          float warpStrength = smoothstep(uLensRadius * 4.5, uLensRadius * 0.4, dist) * uLensActive;
-          vec2 shift = normalize(delta) * vec2(1.0 / uAspectRatio, 1.0) * deflection * 0.85;
-          sampleUv = vUv - shift * warpStrength;
+          float deflection = (rEin * rEin) / max(dist, rEin * 0.40);
+          float warpStrength = smoothstep(rEin * 5.0, rEin * 0.35, dist) * uLensActive;
+          vec2 normDir = normalize(delta) * vec2(1.0 / uAspectRatio, 1.0);
+
+          // Chromatic Dispersion (Red, Green, Blue bend with subtle relativistic wavelength variations)
+          vec2 shiftR = normDir * deflection * 0.88 * warpStrength;
+          vec2 shiftG = normDir * deflection * 0.85 * warpStrength;
+          vec2 shiftB = normDir * deflection * 0.82 * warpStrength;
+
+          vec4 texR = texture2D(tDiffuse, vUv - shiftR);
+          vec4 texG = texture2D(tDiffuse, vUv - shiftG);
+          vec4 texB = texture2D(tDiffuse, vUv - shiftB);
+
+          finalTexRgb = vec3(texR.r, texG.g, texB.b);
+          finalAlpha = (texR.a + texG.a + texB.a) * 0.3333;
+
+          // Shadow capture inside event horizon boundary
+          if (dist < rEin * 0.55) {
+            float shadowFade = smoothstep(rEin * 0.25, rEin * 0.55, dist);
+            finalTexRgb *= shadowFade;
+          }
+        } else {
+          vec4 tex = texture2D(tDiffuse, vUv);
+          finalTexRgb = tex.rgb;
+          finalAlpha = tex.a;
         }
+      } else {
+        vec4 tex = texture2D(tDiffuse, vUv);
+        finalTexRgb = tex.rgb;
+        finalAlpha = tex.a;
       }
 
-      vec4 tex = texture2D(tDiffuse, sampleUv);
       vec2 uv = (vUv - vec2(0.5)) * vec2(uOffset);
       float dist = length(uv);
 
@@ -59,9 +86,9 @@ const CosmicCompositeShader = {
       
       // Deep space black #020208
       vec3 bg = vec3(0.008, 0.008, 0.031);
-      vec3 finalCol = mix(bg, tex.rgb, clamp(vignette, 0.0, 1.0));
+      vec3 finalCol = mix(bg, finalTexRgb, clamp(vignette, 0.0, 1.0));
       
-      gl_FragColor = vec4(finalCol, tex.a);
+      gl_FragColor = vec4(finalCol, finalAlpha);
     }
   `,
 };

@@ -10,6 +10,8 @@ import {
   planetRingVertexShader,
   planetRingFragmentShader,
 } from './shaders/planetShader';
+import { MoonMesh } from './MoonMesh';
+import { LocalAsteroids } from './LocalAsteroids';
 
 function getPlanetTypeIndex(type: PlanetType): number {
   switch (type) {
@@ -31,6 +33,8 @@ export class PlanetMesh {
   public group: THREE.Group;
   public config: PlanetConfig;
   public axialGroup: THREE.Group;
+  public moons: MoonMesh[] = [];
+  public localAsteroids?: LocalAsteroids;
 
   private surfaceMesh: THREE.Mesh;
   private surfaceMaterial: THREE.ShaderMaterial;
@@ -134,9 +138,24 @@ export class PlanetMesh {
       this.ringMesh.rotation.x = Math.PI * 0.5; // Align to equatorial plane of planet
       this.axialGroup.add(this.ringMesh);
     }
+
+    // 5. Orbiting Moon Subsystem
+    if (config.moons && config.moons.length > 0) {
+      config.moons.forEach((mConfig) => {
+        const moon = new MoonMesh(mConfig);
+        this.moons.push(moon);
+        this.group.add(moon.orbitGroup);
+      });
+    }
+
+    // 6. Local Planetary Asteroids / Trojans
+    if (config.hasLocalAsteroids) {
+      this.localAsteroids = new LocalAsteroids(radius, config.localAsteroidCount || 100);
+      this.group.add(this.localAsteroids.group);
+    }
   }
 
-  public update(time: number, starWorldPos: THREE.Vector3) {
+  public update(time: number, starWorldPos: THREE.Vector3, isClose = true) {
     this.surfaceMaterial.uniforms.uTime.value = time;
     this.surfaceMaterial.uniforms.uLightPosition.value.copy(starWorldPos);
 
@@ -159,6 +178,24 @@ export class PlanetMesh {
     if (this.ringMaterial) {
       this.ringMaterial.uniforms.uLightPosition.value.copy(starWorldPos);
     }
+
+    // Moons update
+    for (let i = 0; i < this.moons.length; i++) {
+      this.moons[i].update(time, starWorldPos);
+    }
+
+    // Local Asteroids update
+    if (this.localAsteroids) {
+      this.localAsteroids.update(time, isClose);
+    }
+  }
+
+  public getMoonPositionWorld(moonId: string): THREE.Vector3 | null {
+    const moon = this.moons.find((m) => m.config.id === moonId);
+    if (!moon) return null;
+    const target = new THREE.Vector3();
+    moon.group.getWorldPosition(target);
+    return target;
   }
 
   public dispose() {
@@ -178,6 +215,11 @@ export class PlanetMesh {
     if (this.ringMesh && this.ringMaterial) {
       this.ringMesh.geometry.dispose();
       this.ringMaterial.dispose();
+    }
+
+    this.moons.forEach((m) => m.dispose());
+    if (this.localAsteroids) {
+      this.localAsteroids.dispose();
     }
   }
 }

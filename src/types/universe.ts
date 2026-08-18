@@ -101,8 +101,12 @@ export interface UniverseState {
   isNavigating: boolean;
   distanceToActive: number;
   activeBlackHole?: boolean;
+  detectedBlackHole?: boolean;
+  blackHoleDistance?: number;
   activeSystemId?: string | null;
   activePlanetId?: string | null;
+  activeMoonId?: string | null;
   detectedSystemId?: string | null;
   detectedSystemName?: string | null;
+  timeScale?: number;
 }

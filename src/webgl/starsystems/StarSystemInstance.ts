@@ -3,6 +3,7 @@ import type { StarSystemConfig, StarSystemLOD, PlanetConfig } from '../../types/
 import { StarMesh } from './StarMesh';
 import { PlanetMesh } from './PlanetMesh';
 import { OrbitLine } from './OrbitLine';
+import { AsteroidBelt } from './AsteroidBelt';
 
 export class StarSystemInstance {
   public config: StarSystemConfig;
@@ -11,6 +12,7 @@ export class StarSystemInstance {
   public planets: PlanetMesh[] = [];
   public orbitLines: OrbitLine[] = [];
   public planetOrbitGroups: THREE.Group[] = [];
+  public asteroidBelt?: AsteroidBelt;
 
   public currentLOD: StarSystemLOD = 'GALAXY_POINT';
   public currentDistanceToCamera = 999.0;
@@ -29,7 +31,13 @@ export class StarSystemInstance {
     this.starMesh = new StarMesh(config.star);
     this.group.add(this.starMesh.group);
 
-    // 2. Planets & Orbits
+    // 2. Main Asteroid Belt (if configured)
+    if (config.asteroidBelt) {
+      this.asteroidBelt = new AsteroidBelt(config.asteroidBelt);
+      this.group.add(this.asteroidBelt.group);
+    }
+
+    // 3. Planets & Orbits
     config.planets.forEach((planetConfig) => {
       // Orbit Line
       const orbitLine = new OrbitLine(planetConfig);
@@ -50,7 +58,7 @@ export class StarSystemInstance {
       orbitGroup.add(planetMesh.group);
     });
 
-    // 3. Selection Hit Sphere (Invisible, used for raycasting from distance)
+    // 4. Selection Hit Sphere (Invisible, used for raycasting from distance)
     const hitRadius = Math.max(config.star.apparentRadius * 2.5, 1.8);
     const hitGeom = new THREE.SphereGeometry(hitRadius, 8, 8);
     const hitMat = new THREE.MeshBasicMaterial({ visible: false });
@@ -73,15 +81,22 @@ export class StarSystemInstance {
       this.currentLOD = 'STAR_CORONA';
     } else if (this.currentDistanceToCamera > 2.0) {
       this.currentLOD = 'SYSTEM_ORBITS';
-    } else {
+    } else if (this.currentDistanceToCamera > 0.4) {
       this.currentLOD = 'PLANET_CLOSE';
+    } else {
+      this.currentLOD = 'MOON_CLOSE';
     }
 
-    const showPlanets = this.currentDistanceToCamera < 40.0;
+    const showPlanets = this.currentDistanceToCamera < 45.0;
     const orbitAlpha = Math.max(0, Math.min(1, (30.0 - this.currentDistanceToCamera) / 18.0)) * 0.18;
 
     // Update Star
     this.starMesh.update(time, camera);
+
+    // Update Asteroid Belt
+    if (this.asteroidBelt) {
+      this.asteroidBelt.update(time, this.currentDistanceToCamera);
+    }
 
     // Update Planets & Orbits
     for (let i = 0; i < this.planets.length; i++) {
@@ -105,7 +120,7 @@ export class StarSystemInstance {
         const posZ = Math.sin(meanAnomaly) * b;
 
         planet.group.position.set(posX, 0, posZ);
-        planet.update(time, this.starWorldPosition);
+        planet.update(time, this.starWorldPosition, this.currentDistanceToCamera < 10.0);
       }
     }
   }
@@ -118,15 +133,48 @@ export class StarSystemInstance {
     return target;
   }
 
+  public getMoonPositionWorld(planetId: string, moonId: string): THREE.Vector3 | null {
+    const planet = this.planets.find((p) => p.config.id === planetId);
+    if (!planet) return null;
+    return planet.getMoonPositionWorld(moonId);
+  }
+
   public getPlanetConfig(planetId: string): PlanetConfig | undefined {
     const planet = this.planets.find((p) => p.config.id === planetId);
     return planet ? planet.config : undefined;
+  }
+
+  public findIntersectedMoon(
+    ray: THREE.Ray,
+    planetId: string
+  ): { moonId: string; distance: number } | null {
+    const planet = this.planets.find((p) => p.config.id === planetId);
+    if (!planet) return null;
+
+    let closestMoonId: string | null = null;
+    let closestDist = Infinity;
+
+    const mPos = new THREE.Vector3();
+    for (const moon of planet.moons) {
+      moon.group.getWorldPosition(mPos);
+      const dist = ray.distanceToPoint(mPos);
+      const hitRadius = Math.max(moon.config.radius * 3.0, 0.08);
+      if (dist < hitRadius && dist < closestDist) {
+        closestDist = dist;
+        closestMoonId = moon.config.id;
+      }
+    }
+
+    return closestMoonId ? { moonId: closestMoonId, distance: closestDist } : null;
   }
 
   public dispose() {
     this.starMesh.dispose();
     this.planets.forEach((p) => p.dispose());
     this.orbitLines.forEach((o) => o.dispose());
+    if (this.asteroidBelt) {
+      this.asteroidBelt.dispose();
+    }
     this.hitSphere.geometry.dispose();
     (this.hitSphere.material as THREE.Material).dispose();
   }

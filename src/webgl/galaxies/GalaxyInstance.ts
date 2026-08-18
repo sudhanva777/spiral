@@ -60,9 +60,9 @@ export class GalaxyInstance {
     this.particles = new GalaxyParticles(count, config);
     this.group.add(this.particles.points);
 
-    // Modular Living Supermassive Black Hole System (Galaxies 02-06)
+    // Modular Living Supermassive Black Hole System (Galaxies 02-16)
     if (config.hasBlackHole && config.blackHoleConfig) {
-      const bhParticles = Math.min(Math.round(count * 0.055), 6500);
+      const bhParticles = Math.min(Math.max(Math.round(count * 0.08), 5500), 9500);
       this.blackHole = new BlackHoleSystem(config.blackHoleConfig, bhParticles);
       this.group.add(this.blackHole.group);
     }

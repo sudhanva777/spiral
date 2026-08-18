@@ -300,6 +300,12 @@ html, body, #root {
   box-shadow: 0 0 15px rgba(57, 107, 255, 0.3);
 }
 
+.active-bh-chip {
+  border-color: rgba(244, 63, 94, 0.6);
+  background: rgba(45, 10, 20, 0.75);
+  box-shadow: 0 0 18px rgba(244, 63, 94, 0.4);
+}
+
 .chip-icon {
   width: 14px;
   height: 14px;
@@ -1021,6 +1027,43 @@ html, body, #root {
   background: rgba(6, 182, 212, 0.15);
 }
 
+.active-moon-chip {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.15);
+}
+
+.active-belt-chip {
+  border-color: rgba(217, 119, 6, 0.4);
+  background: rgba(217, 119, 6, 0.12);
+}
+
+.moon-pill {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.moon-pill:hover {
+  border-color: rgba(245, 158, 11, 0.7);
+  background: rgba(245, 158, 11, 0.2);
+}
+
+.moon-pill.active {
+  border-color: rgba(245, 158, 11, 0.9);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.3), rgba(217, 119, 6, 0.3));
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
+  color: #fff;
+}
+
+.moon-count-tag {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  font-size: 0.58rem;
+  font-weight: 700;
+  padding: 0.12rem 0.32rem;
+  border-radius: 4px;
+  margin-left: 0.35rem;
+}
+
 .galaxy-nav-num {
   color: #f472b6;
   font-weight: 700;
@@ -1042,5 +1085,6 @@ html, body, #root {
     animation: none;
   }
 }
+
 
 

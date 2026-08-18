@@ -107,9 +107,21 @@ export const CanvasContainer: React.FC = () => {
     }
   };
 
+  const handleSelectMoon = (systemId: string, planetId: string, moonId: string) => {
+    if (engineRef.current) {
+      engineRef.current.enterMoon(systemId, planetId, moonId);
+    }
+  };
+
   const handleExitStarSystem = () => {
     if (engineRef.current) {
       engineRef.current.exitStarSystem();
+    }
+  };
+
+  const handleSetTimeScale = (scale: number) => {
+    if (engineRef.current) {
+      engineRef.current.setTimeScale(scale);
     }
   };
 
@@ -135,7 +147,9 @@ export const CanvasContainer: React.FC = () => {
         onSelectGalaxy={handleSelectGalaxy}
         onSelectStarSystem={handleSelectStarSystem}
         onSelectPlanet={handleSelectPlanet}
+        onSelectMoon={handleSelectMoon}
         onExitStarSystem={handleExitStarSystem}
+        onSetTimeScale={handleSetTimeScale}
       />
     </div>
   );

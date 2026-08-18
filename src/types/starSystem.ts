@@ -17,6 +17,38 @@ export interface RingConfig {
   opacity: number;
 }
 
+export interface MoonConfig {
+  id: string;
+  name: string;
+  subtitle: string;
+  description: string;
+  radius: number;
+  orbitRadius: number;
+  orbitSpeed: number; // Angular speed (rad/s) around planet
+  orbitEccentricity?: number;
+  orbitInclination?: number;
+  orbitPhase?: number;
+  rotationSpeed: number;
+  primaryColor: string;
+  secondaryColor: string;
+  craterDensity?: number;
+  isVolcanic?: boolean;
+  isIcy?: boolean;
+}
+
+export interface AsteroidBeltConfig {
+  id: string;
+  name: string;
+  innerRadius: number;
+  outerRadius: number;
+  count: number;
+  height: number;
+  baseColor: string;
+  accentColor: string;
+  orbitSpeed: number;
+  inclination?: number;
+}
+
 export interface PlanetConfig {
   id: string;
   name: string;
@@ -40,6 +72,9 @@ export interface PlanetConfig {
   atmosphereThickness?: number;
   hasClouds?: boolean;
   rings?: RingConfig;
+  moons?: MoonConfig[];
+  hasLocalAsteroids?: boolean;
+  localAsteroidCount?: number;
 }
 
 export interface StarConfig {
@@ -66,12 +101,21 @@ export interface StarSystemConfig {
   star: StarConfig;
   planets: PlanetConfig[];
   systemRadius: number;
+  asteroidBelt?: AsteroidBeltConfig;
 }
 
-export type StarSystemLOD = 'GALAXY_POINT' | 'STAR_PROMINENT' | 'STAR_CORONA' | 'SYSTEM_ORBITS' | 'PLANET_CLOSE';
+export type StarSystemLOD =
+  | 'GALAXY_POINT'
+  | 'STAR_PROMINENT'
+  | 'STAR_CORONA'
+  | 'SYSTEM_ORBITS'
+  | 'PLANET_CLOSE'
+  | 'MOON_CLOSE'
+  | 'SURFACE_CLOSE';
 
 export interface ActiveSystemFocus {
   systemId: string;
   planetId?: string | null;
+  moonId?: string | null;
   lod: StarSystemLOD;
 }

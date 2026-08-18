@@ -17,6 +17,10 @@ import {
   Sun,
   Radio,
   ArrowLeft,
+  Moon,
+  Disc,
+  Play,
+  Pause,
 } from 'lucide-react';
 import type { GalaxyPreset, InteractionState, QualityTier, SimulationStats } from '../types/simulation';
 import type { UniverseState } from '../types/universe';
@@ -109,7 +113,9 @@ interface MinimalHUDProps {
   onSelectGalaxy?: (galaxyId: string) => void;
   onSelectStarSystem?: (systemId: string) => void;
   onSelectPlanet?: (systemId: string, planetId: string) => void;
+  onSelectMoon?: (systemId: string, planetId: string, moonId: string) => void;
   onExitStarSystem?: () => void;
+  onSetTimeScale?: (scale: number) => void;
 }
 
 export const MinimalHUD: React.FC<MinimalHUDProps> = ({
@@ -128,7 +134,9 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
   onSelectGalaxy,
   onSelectStarSystem,
   onSelectPlanet,
+  onSelectMoon,
   onExitStarSystem,
+  onSetTimeScale,
 }) => {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -148,12 +156,19 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
       ? activeSystem.planets.find((p) => p.id === universeState.activePlanetId)
       : undefined;
 
+  const activeMoon =
+    activePlanet && universeState.activeMoonId && activePlanet.moons
+      ? activePlanet.moons.find((m) => m.id === universeState.activeMoonId)
+      : undefined;
+
   const isPrimeGalaxy = universeState.activeGalaxyId === 'galaxy01';
   const showDetectedPrompt =
     universeState.detectedSystemId &&
     universeState.detectedSystemId !== dismissedPromptSystemId &&
     !universeState.activeSystemId &&
     !universeState.isNavigating;
+
+  const timeScale = universeState.timeScale !== undefined ? universeState.timeScale : 1.0;
 
   const handleToggleAudio = () => {
     const playing = soundSynthesizer.toggle();
@@ -170,6 +185,17 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
     }
   };
 
+  const cycleTimeScale = () => {
+    if (!onSetTimeScale) return;
+    if (timeScale === 1.0) {
+      onSetTimeScale(0.25); // Observation mode
+    } else if (timeScale === 0.25) {
+      onSetTimeScale(0.0); // Freeze mode
+    } else {
+      onSetTimeScale(1.0); // Normal speed
+    }
+  };
+
   return (
     <div className="hud-overlay pointer-events-none select-none">
       {/* Top Header Bar */}
@@ -182,7 +208,9 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           <div className="brand-text">
             <h1 className="brand-title">A E T H E R // D E E P &nbsp; S P A C E</h1>
             <span className="brand-sub">
-              {activePlanet
+              {activeMoon
+                ? `${activeMoon.name.toUpperCase()} • ${activeMoon.subtitle.toUpperCase()}`
+                : activePlanet
                 ? `${activePlanet.name.toUpperCase()} • ${activePlanet.subtitle.toUpperCase()}`
                 : activeSystem
                 ? `${activeSystem.name.toUpperCase()} • ${activeSystem.star.spectralType.toUpperCase()}`
@@ -191,12 +219,12 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           </div>
         </div>
 
-        {/* Dynamic Breadcrumb Bar */}
+        {/* Dynamic 5-Tier Breadcrumb Bar */}
         <div className="universe-breadcrumb-bar pointer-events-auto">
           <button
             onClick={() => onResetCamera && onResetCamera()}
             className="breadcrumb-node"
-            title="Reset Camera to Galaxy View"
+            title="Reset Camera to Universe / Galaxy View"
           >
             <span>DEEP SPACE</span>
           </button>
@@ -234,8 +262,27 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           {activePlanet && (
             <>
               <span className="breadcrumb-separator">&gt;</span>
-              <span className="breadcrumb-leaf text-cyan-300 animate-pulse">
-                {activePlanet.name.toUpperCase()}
+              <button
+                onClick={() => {
+                  if (activeMoon && onSelectPlanet && activeSystem) {
+                    onSelectPlanet(activeSystem.id, activePlanet.id);
+                  }
+                }}
+                className={`breadcrumb-node ${!activeMoon ? 'breadcrumb-leaf text-cyan-300' : ''}`}
+                title="Focus Planet"
+              >
+                <Globe2 className="w-3.5 h-3.5 mr-1 text-cyan-300" />
+                <span>{activePlanet.name.toUpperCase()}</span>
+              </button>
+            </>
+          )}
+
+          {activeMoon && (
+            <>
+              <span className="breadcrumb-separator">&gt;</span>
+              <span className="breadcrumb-leaf text-amber-300 animate-pulse">
+                <Moon className="w-3.5 h-3.5 mr-1 text-amber-300 inline" />
+                {activeMoon.name.toUpperCase()}
               </span>
             </>
           )}
@@ -270,11 +317,38 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
             <span className="chip-val">{stats.cameraDistance} AU</span>
           </div>
 
-          {activePlanet && (
+          {activeMoon && (
+            <div className="telemetry-chip active-moon-chip">
+              <Moon className="chip-icon text-amber-300 animate-pulse" />
+              <span className="chip-label text-amber-300">
+                LUNAR PROXIMITY // {activeMoon.name.toUpperCase()}
+              </span>
+            </div>
+          )}
+
+          {activePlanet && !activeMoon && (
             <div className="telemetry-chip active-planet-chip">
               <Globe2 className="chip-icon text-cyan-300 animate-pulse" />
               <span className="chip-label text-cyan-300">
                 {activePlanet.type.toUpperCase()} WORLD
+              </span>
+            </div>
+          )}
+
+          {activeSystem?.asteroidBelt && !activePlanet && (
+            <div className="telemetry-chip active-belt-chip hidden-mobile">
+              <Disc className="chip-icon text-amber-400 animate-spin" />
+              <span className="chip-label text-amber-300">
+                ASTEROID BELT ACTIVE
+              </span>
+            </div>
+          )}
+
+          {universeState.detectedBlackHole && !activeSystem && (
+            <div className="telemetry-chip active-bh-chip animate-pulse">
+              <Crosshair className="chip-icon text-rose-400" />
+              <span className="chip-label text-rose-300">
+                SUPERMASSIVE BLACK HOLE // GRAV FIELD: HIGH
               </span>
             </div>
           )}
@@ -297,12 +371,28 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
 
         {/* Global Action Buttons */}
         <div className="hud-actions pointer-events-auto">
-          {activeSystem && onExitStarSystem && (
+          {/* Observation Mode / Time Scale Switcher */}
+          <button
+            onClick={cycleTimeScale}
+            className={`hud-btn ${timeScale < 1.0 ? 'active ring-1 ring-amber-400' : ''}`}
+            title={`Orbital Simulation Speed: ${timeScale === 1.0 ? 'Normal (1.0x)' : timeScale === 0.25 ? 'Observation (0.25x)' : 'Frozen (0.0x)'} (SPACE)`}
+            aria-label="Time Scale"
+          >
+            {timeScale === 0.0 ? (
+              <Pause className="w-4 h-4 text-rose-400" />
+            ) : timeScale === 0.25 ? (
+              <span className="text-[0.62rem] font-bold text-amber-300">0.25x</span>
+            ) : (
+              <Play className="w-4 h-4 text-emerald-400" />
+            )}
+          </button>
+
+          {(activeMoon || activePlanet || activeSystem) && onExitStarSystem && (
             <button
               onClick={onExitStarSystem}
               className="hud-btn active"
-              title="Exit to Galaxy View (ESC / R)"
-              aria-label="Exit System"
+              title="Exit to Parent Level (ESC / Back)"
+              aria-label="Exit Level"
             >
               <ArrowLeft className="w-4 h-4 text-cyan-300" />
             </button>
@@ -333,7 +423,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           <button
             onClick={() => setShowInfo(!showInfo)}
             className={`hud-btn ${showInfo ? 'active' : ''}`}
-            title="Universe Architecture & Star Systems Guide"
+            title="Universe Architecture, Moons & Asteroids Guide"
             aria-label="Simulation Architecture"
           >
             <Info className="w-4 h-4" />
@@ -390,8 +480,53 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
         </div>
       )}
 
-      {/* Star System Planetary Orbit Explorer Drawer */}
-      {activeSystem ? (
+      {/* Hierarchy Level Explorer Drawer */}
+      {activePlanet && activePlanet.moons && activePlanet.moons.length > 0 ? (
+        /* Planet & Moon Explorer */
+        <nav className="cosmic-navigator-bar pointer-events-auto">
+          <div className="system-navigator-header">
+            <span className="system-title-tag text-cyan-300">
+              <Globe2 className="w-3.5 h-3.5 mr-1.5 text-cyan-300" />
+              {activePlanet.name} • {activePlanet.moons.length} NATURAL SATELLITE{activePlanet.moons.length > 1 ? 'S' : ''}
+            </span>
+            <button
+              onClick={() => onSelectPlanet && activeSystem && onSelectPlanet(activeSystem.id, activePlanet.id)}
+              className="system-overview-btn"
+            >
+              PLANET OVERVIEW
+            </button>
+          </div>
+
+          <div className="galaxy-pills-scroll">
+            {activePlanet.moons.map((moon, idx) => {
+              const isMoonActive = moon.id === universeState.activeMoonId;
+              return (
+                <button
+                  key={moon.id}
+                  onClick={() => onSelectMoon && activeSystem && onSelectMoon(activeSystem.id, activePlanet.id, moon.id)}
+                  className={`galaxy-nav-pill moon-pill ${isMoonActive ? 'active' : ''}`}
+                  title={`${moon.name} (${moon.subtitle})`}
+                >
+                  <Moon className={`w-3.5 h-3.5 mr-1.5 ${isMoonActive ? 'text-amber-300' : 'text-slate-400'}`} />
+                  <span className="galaxy-nav-num">M{(idx + 1).toString().padStart(2, '0')}</span>
+                  <span className="galaxy-nav-name">{moon.name}</span>
+                </button>
+              );
+            })}
+
+            <div className="divider-vertical" />
+
+            <button
+              onClick={() => onSelectStarSystem && activeSystem && onSelectStarSystem(activeSystem.id)}
+              className="galaxy-nav-pill"
+            >
+              <Sun className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
+              <span className="galaxy-nav-name">RETURN TO STAR SYSTEM</span>
+            </button>
+          </div>
+        </nav>
+      ) : activeSystem ? (
+        /* Star System Planetary Orbit Explorer Drawer */
         <nav className="cosmic-navigator-bar pointer-events-auto">
           <div className="system-navigator-header">
             <span className="system-title-tag">
@@ -410,6 +545,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
             {activeSystem.planets.map((planet, idx) => {
               const isPlanetActive = planet.id === universeState.activePlanetId;
               const isEarthLike = planet.type === 'earth-like';
+              const moonCount = planet.moons ? planet.moons.length : 0;
               return (
                 <button
                   key={planet.id}
@@ -421,6 +557,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
                   <span className="galaxy-nav-num">{(idx + 1).toString().padStart(2, '0')}</span>
                   <span className="galaxy-nav-name">{planet.name}</span>
                   {isEarthLike && <span className="earth-tag">EARTH-ANALOG</span>}
+                  {moonCount > 0 && <span className="moon-count-tag">{moonCount}M</span>}
                 </button>
               );
             })}
@@ -497,34 +634,35 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
       {showInfo && (
         <div className="hud-info-modal pointer-events-auto">
           <div className="modal-header">
-            <h3>AETHER Planetary Star System Architecture</h3>
+            <h3>AETHER Planetary, Moon & Asteroid Exploration Guide</h3>
             <button onClick={() => setShowInfo(false)} className="close-btn">×</button>
           </div>
           <div className="modal-body">
             <p>
-              <strong>Hierarchical Cosmic Depth:</strong> Embedded inside the spiral arms of Aether Prime are 4 distinct, fully simulated planetary star systems with Keplerian elliptical orbits, axial planet rotations, swirling cloud layers, and atmospheric scattering.
+              <strong>Complete Hierarchy:</strong> Seamless, single-canvas exploration across all cosmic scales:
+              <br />
+              <code>UNIVERSE &gt; GALAXY &gt; STAR SYSTEM &gt; STAR &gt; PLANET &gt; MOON &gt; ASTEROIDS &gt; LOCAL SPACE</code>
             </p>
             <p>
-              <strong>Star System 01 (Blue Star):</strong> Luminous electric-blue star with 5 orbiting worlds, including <em>Oasis Prime</em> (an Earth-like oceanic biosphere analog).
+              <strong>Moon Subsystem:</strong> Major planetary worlds feature orbiting natural satellites with Keplerian velocities, independent axial rotations, and directional solar illumination.
             </p>
             <p>
-              <strong>Star System 02 (Massive Star):</strong> Colossal hypergiant commanding 10 planets: 3 extreme lava worlds, 2 speculative Earth-like candidates (<em>Gaia Nova</em> & <em>Aegis</em>), golden ringed giant <em>Chronos</em>, and deep ocean world <em>Thalassa</em>.
+              <strong>Asteroid Belts & Trojans:</strong> GPU-instanced asteroid belts and local planetary debris fields orbiting stars and planets with tumbling kinematics and progressive proximity detail.
             </p>
             <p>
-              <strong>Star System 03 (Violet Star):</strong> White-hot core with magenta-violet coronal halo anchoring 6 diverse planetary worlds.
-            </p>
-            <p>
-              <strong>Star System 04 (Twin-Earth Sun):</strong> Golden solar analog harboring 7 planets, including twin Earth-analogs (<em>Terra Nova</em> and <em>Avalon</em>).
+              <strong>Observation Mode:</strong> Press <kbd>SPACE</kbd> or click the Speed button to slow the orbital simulation to 0.25x for detailed orbital inspection.
             </p>
             <div className="modal-interaction-guide">
-              <h4>Navigation & Deep Zoom Controls</h4>
+              <h4>Multi-Scale Navigation Controls</h4>
               <ul>
-                <li><span>Zoom deeply into Prime Galaxy</span> Progressively discover star systems and planets</li>
-                <li><span>Click Star / SYS Pill</span> Smoothly dive into the Star System ($d \approx 4-6$ AU)</li>
-                <li><span>Click Planet / Planet Pill</span> Inspect planet up close with rotating clouds and atmosphere ($d \approx 0.5$ AU)</li>
-                <li><span>Left-Click Drag</span> 360° Orbit around star or planet</li>
+                <li><span>Click Star / SYS Pill</span> Dive into Star System ($d \approx 4-6$ AU)</li>
+                <li><span>Click Planet / Planet Pill</span> Dive into Planet ($d \approx 0.5$ AU)</li>
+                <li><span>Click Moon / Moon Pill</span> Dive into Moon ($d \approx 0.05$ AU)</li>
+                <li><span>Left-Click Drag</span> 360° Orbit around current object</li>
                 <li><span>Right-Click Drag</span> Pan camera</li>
-                <li><span>Escape / Back Arrow / R</span> Seamlessly back out from planet to star, and star to galaxy</li>
+                <li><span>Escape / Back Button</span> Ascend smoothly to parent scale</li>
+                <li><span>Space</span> Toggle 0.25x Observation Slow-Motion</li>
+                <li><span>R</span> Reset to Galaxy Overview</li>
               </ul>
             </div>
           </div>
@@ -536,11 +674,15 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
         <div className="interaction-hint pointer-events-auto">
           <div className="pulse-dot" />
           <span>
-            {activePlanet
-              ? `INSPECTING ${activePlanet.name.toUpperCase()} • DRAG — ORBIT • SCROLL — ZOOM • ESC / BACK — EXIT WORLD`
+            {activeMoon
+              ? `INSPECTING ${activeMoon.name.toUpperCase()} (MOON OF ${activePlanet?.name.toUpperCase()}) • DRAG — ORBIT • ESC / BACK — EXIT MOON`
+              : activePlanet
+              ? `INSPECTING ${activePlanet.name.toUpperCase()} • CLICK MOONS TO DIVE IN • ESC / BACK — EXIT WORLD`
               : activeSystem
               ? `STAR SYSTEM // ${activeSystem.name.toUpperCase()} • CLICK PLANETS TO DIVE IN • ESC / BACK — EXIT TO GALAXY`
-              : 'ZOOM INTO PRIME GALAXY TO DISCOVER 4 STAR SYSTEMS • PILLS [01–16] — TRAVEL UNIVERSE • R — RESET'}
+              : universeState.detectedBlackHole
+              ? `SUPERMASSIVE BLACK HOLE FIELD • GRAVITATIONAL LENSING & WARPED ACCRETION ARCS • C / DOUBLE-CLICK — INSPECT CORE`
+              : 'ZOOM INTO PRIME GALAXY FOR STAR SYSTEMS OR TRAVEL TO GALAXIES [02–16] FOR SUPERMASSIVE BLACK HOLES'}
           </span>
         </div>
 

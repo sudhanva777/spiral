@@ -567,15 +567,15 @@ export function generateGalaxyParticles(
 
         const coreNorm = Math.min(radius / 6.8, 1.0);
         if (coreNorm < 0.10) {
-          col = rgbWhite;
-          luminosity *= 2.5;
-          size *= 1.4;
+          col = config.id === 'galaxy06' ? rgbWhite : rgbCore;
+          luminosity *= 2.0;
+          size *= 1.3;
         } else if (coreNorm < 0.35) {
-          col = mixRgb(rgbWhite, rgbCoreHalo, (coreNorm - 0.10) / 0.25);
-          luminosity *= 1.8;
+          col = mixRgb(config.id === 'galaxy06' ? rgbWhite : rgbCore, rgbCoreHalo, (coreNorm - 0.10) / 0.25);
+          luminosity *= 1.6;
         } else if (coreNorm < 0.65) {
           col = mixRgb(rgbCoreHalo, rgbInner, (coreNorm - 0.35) / 0.30);
-          luminosity *= 1.4;
+          luminosity *= 1.3;
         } else {
           col = mixRgb(rgbInner, rgbDeep, (coreNorm - 0.65) / 0.35);
         }
