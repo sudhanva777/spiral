@@ -140,6 +140,8 @@ export interface UniverseState {
   activeMoonId?: string | null;
   detectedSystemId?: string | null;
   detectedSystemName?: string | null;
+  detectedPlanetId?: string | null;
+  detectedPlanetName?: string | null;
   timeScale?: number;
   scaleLevel?: ScaleLevel;
   navigationMode?: NavigationMode;

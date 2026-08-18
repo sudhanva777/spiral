@@ -153,6 +153,7 @@ interface MinimalHUDProps {
   onExitStarSystem?: () => void;
   onSetTimeScale?: (scale: number) => void;
   onDescendToSurface?: () => void;
+  onEnterPlanetSurface?: (systemId: string, planetId: string) => void;
   onExitSurface?: () => void;
 }
 
@@ -176,6 +177,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
   onExitStarSystem,
   onSetTimeScale,
   onDescendToSurface,
+  onEnterPlanetSurface,
   onExitSurface,
 }) => {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
@@ -213,6 +215,14 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
   const surfaceTime = universeState.surfaceState?.timeOfDay ?? 0;
   const activeDiscoveryTag = universeState.activeDiscoveryTag;
   const discoveryInfo = activeDiscoveryTag ? DISCOVERY_TAG_LABEL[activeDiscoveryTag] : undefined;
+
+  const detectedPlanet =
+    activeSystem && universeState.detectedPlanetId
+      ? activeSystem.planets.find((p) => p.id === universeState.detectedPlanetId)
+      : undefined;
+
+  const showDetectedPlanetPrompt =
+    detectedPlanet && !universeState.activePlanetId && !isOnSurface && !universeState.isNavigating;
 
   const timeScale = universeState.timeScale !== undefined ? universeState.timeScale : 1.0;
 
@@ -577,6 +587,29 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
         </div>
       )}
 
+      {/* Habitable World Proximity Prompt — approach a surface-explorable planet */}
+      {showDetectedPlanetPrompt && activeSystem && (
+        <div className="star-system-prompt-banner pointer-events-auto animate-fade-in">
+          <div className="prompt-content">
+            <Globe2 className="w-5 h-5 text-emerald-300 animate-pulse mr-2.5" />
+            <div className="prompt-text">
+              <span className="prompt-title text-emerald-300">HABITABLE WORLD DETECTED</span>
+              <span className="prompt-sub">
+                {detectedPlanet.name.toUpperCase()} // {detectedPlanet.subtitle.toUpperCase()}
+              </span>
+            </div>
+            <div className="prompt-actions">
+              <button
+                onClick={() => onEnterPlanetSurface && onEnterPlanetSurface(activeSystem.id, detectedPlanet.id)}
+                className="prompt-btn-enter"
+              >
+                ENTER PLANET
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Discovery Classification Banner (IC 1579 deep-exploration systems) */}
       {activeSystem && discoveryInfo && !isOnSurface && (
         <div className={`discovery-banner pointer-events-auto animate-fade-in ${discoveryInfo.color}`}>
@@ -587,12 +620,12 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
         </div>
       )}
 
-      {/* Surface Mode Banner (Aurelia — the night sky IS IC 1579) */}
+      {/* Surface Mode Banner (night sky IS IC 1579 from every habitable world) */}
       {isOnSurface && (
         <div className="surface-banner pointer-events-auto animate-fade-in">
           <div className="surface-banner-row">
             <Sun className="w-4 h-4 mr-2 text-amber-300" />
-            <span className="surface-title">AURELIA SURFACE // {timeOfDayLabel(surfaceTime)}</span>
+            <span className="surface-title">{activePlanet?.name.toUpperCase()} SURFACE // {timeOfDayLabel(surfaceTime)}</span>
             <span className="surface-sub">
               LOCAL DAY {(surfaceTime * 24).toFixed(1)}H • NIGHT SKY STREAMS FROM IC 1579
             </span>
@@ -600,7 +633,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           <div className="surface-banner-actions">
             {onExitSurface && (
               <button onClick={onExitSurface} className="prompt-btn-skip">
-                RETURN TO ORBIT
+                EXIT PLANET // RETURN TO ORBIT
               </button>
             )}
           </div>
@@ -621,6 +654,14 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
               className="system-overview-btn"
             >
               PLANET OVERVIEW
+            </button>
+            <button
+              onClick={() => onExitStarSystem && onExitStarSystem()}
+              className="system-overview-btn exit-level-btn"
+              title="Exit Planet — Return to Star System (ESC / Back)"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 mr-1.5 text-cyan-300" />
+              EXIT PLANET
             </button>
             {activePlanet.surfaceExplore && !isOnSurface && onDescendToSurface && (
               <button onClick={onDescendToSurface} className="system-overview-btn surface-descend-btn">
@@ -672,6 +713,14 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
             >
               FULL SYSTEM VIEW
             </button>
+            <button
+              onClick={() => onExitStarSystem && onExitStarSystem()}
+              className="system-overview-btn exit-level-btn"
+              title="Exit System — Return to IC 1579 (ESC / Back)"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 mr-1.5 text-emerald-300" />
+              EXIT SYSTEM
+            </button>
           </div>
 
           <div className="galaxy-pills-scroll">
@@ -690,7 +739,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
                   <span className="galaxy-nav-num">{(idx + 1).toString().padStart(2, '0')}</span>
                   <span className="galaxy-nav-name">{planet.name}</span>
                   {isEarthLike && <span className="earth-tag">EARTH-ANALOG</span>}
-                  {planet.surfaceExplore && <span className="landable-tag">LANDABLE</span>}
+                  {planet.surfaceExplore && <span className="landable-tag">HABITABLE</span>}
                   {moonCount > 0 && <span className="moon-count-tag">{moonCount}M</span>}
                 </button>
               );
@@ -704,7 +753,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
             <span className={`system-title-tag ${isIC1579 ? 'text-emerald-300' : 'text-purple-300'}`}>
               <Sparkles className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
               {isIC1579
-                ? 'IC 1579 EMERALD DEEP-SPIRAL // 10 DISCOVERABLE SYSTEMS'
+                ? 'IC 1579 EMERALD DEEP-SPIRAL // 10 DISCOVERABLE SYSTEMS • 5 HABITABLE WORLDS'
                 : 'PRIME GALAXY STELLAR SYSTEMS (4 SYSTEMS DISCOVERABLE)'}
             </span>
           </div>
@@ -829,7 +878,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           <div className="pulse-dot" />
           <span>
             {isOnSurface
-              ? `AURELIA SURFACE // NIGHT SKY = IC 1579 FROM THIS PLANET • DRAG — LOOK AROUND • SCROLL — CLIMB • ESC — RETURN TO ORBIT`
+              ? `${activePlanet?.name.toUpperCase() || 'PLANET'} SURFACE // NIGHT SKY = IC 1579 FROM THIS WORLD • WASD / ARROWS — WALK • DRAG — LOOK AROUND • SCROLL — CLIMB • ESC — EXIT PLANET`
               : activeMoon
               ? `INSPECTING ${activeMoon.name.toUpperCase()} (MOON OF ${activePlanet?.name.toUpperCase()}) • DRAG — ORBIT • ESC / BACK — EXIT MOON`
               : activePlanet
@@ -837,7 +886,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
               : activeSystem
               ? `STAR SYSTEM // ${activeSystem.name.toUpperCase()} • CLICK PLANETS TO DIVE IN • ESC / BACK — EXIT TO GALAXY`
               : isIC1579
-              ? `IC 1579 // EMERALD DEEP SPIRAL • DIVE INTO DISCOVERABLE SYSTEMS (10) • C / DOUBLE-CLICK — INSPECT CORE • R — LEAVE GALAXY / RETURN TO AETHER`
+              ? `IC 1579 // EMERALD DEEP SPIRAL • DIVE INTO DISCOVERABLE SYSTEMS (10) & HABITABLE WORLDS (5) • C / DOUBLE-CLICK — INSPECT CORE • R — LEAVE GALAXY / RETURN TO AETHER`
               : universeState.detectedBlackHole
               ? `SUPERMASSIVE BLACK HOLE FIELD • GRAVITATIONAL LENSING & WARPED ACCRETION ARCS • C / DOUBLE-CLICK — INSPECT CORE`
               : 'ZOOM INTO PRIME GALAXY FOR STAR SYSTEMS OR TRAVEL TO GALAXIES [02–16] FOR SUPERMASSIVE BLACK HOLES'}

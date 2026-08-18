@@ -71,6 +71,18 @@ uniform float uTime;
 uniform float uSeaLevel;
 uniform float uNightFactor;
 
+// Per-planet surface palette (derived from the PlanetConfig colors)
+uniform vec3 uOceanShallow;
+uniform vec3 uOceanDeep;
+uniform vec3 uBeach;
+uniform vec3 uForest;
+uniform vec3 uDeepForest;
+uniform vec3 uRock;
+uniform vec3 uSnow;
+uniform vec3 uSnowIce;
+uniform vec3 uBioCol;
+uniform vec3 uFogCol;
+
 varying vec3 vLocalPos;
 varying vec3 vNormal;
 varying vec2 vUv;
@@ -107,10 +119,10 @@ void main() {
   float snowline = 0.62 + 0.30 * vLatitude;
 
   if (e < uSeaLevel) {
-    // Ocean: deep teal depths to pale cyan-green shallows
+    // Ocean: per-planet deep tones to pale shallows
     float depth = clamp((uSeaLevel - e) / (uSeaLevel + 1.0), 0.0, 1.0);
-    vec3 shallow = vec3(0.10, 0.52, 0.44);
-    vec3 deep = vec3(0.012, 0.16, 0.20);
+    vec3 shallow = uOceanShallow;
+    vec3 deep = uOceanDeep;
     col = mix(shallow, deep, depth);
     // Sun glint
     vec3 H = normalize(uSunDir + V);
@@ -119,12 +131,12 @@ void main() {
   } else {
     // Land: beach -> forest -> highlands -> mountain rock -> snow
     float landH = clamp((e - uSeaLevel) / (1.0 - uSeaLevel), 0.0, 1.0);
-    vec3 beach = vec3(0.52, 0.48, 0.34);
-    vec3 forest = vec3(0.05, 0.26, 0.13);
-    vec3 deepForest = vec3(0.028, 0.16, 0.09);
-    vec3 rock = vec3(0.20, 0.22, 0.20);
-    vec3 snow = vec3(0.88, 0.94, 0.92);
-    vec3 snowIce = vec3(0.82, 0.95, 0.92);
+    vec3 beach = uBeach;
+    vec3 forest = uForest;
+    vec3 deepForest = uDeepForest;
+    vec3 rock = uRock;
+    vec3 snow = uSnow;
+    vec3 snowIce = uSnowIce;
 
     col = mix(beach, forest, smoothstep(0.0, 0.14, landH));
     col = mix(col, deepForest, smoothstep(0.14, 0.38, landH) * 0.8);
@@ -140,9 +152,9 @@ void main() {
   float ambient = 0.05 + 0.10 * (1.0 - uNightFactor);
   float light = diffuse * 0.92 + ambient;
 
-  // Night-side bioluminescent teal patches (alien life on Aurelia)
+  // Night-side bioluminescent patches (planet-tinted alien life)
   float bioGlow = bio * smoothstep(-0.1, 0.05, -sunElev) * 0.85;
-  vec3 bioCol = vec3(0.10, 0.95, 0.65);
+  vec3 bioCol = uBioCol;
   col = mix(col, bioCol, bioGlow * (0.55 + 0.45 * sin(uTime * 0.7 + vLatitude * 40.0 + vUv.x * 90.0)));
 
   col *= light;
@@ -150,7 +162,7 @@ void main() {
   // --- Aerial perspective: blend toward sky by distance ---
   float fogDensity = 0.055;
   float fog = 1.0 - exp(-vCamDist * fogDensity);
-  vec3 fogCol = mix(skyCol, vec3(0.30, 0.55, 0.45), clamp(sunElev * 0.6 + 0.2, 0.0, 1.0));
+  vec3 fogCol = mix(skyCol, uFogCol, clamp(sunElev * 0.6 + 0.2, 0.0, 1.0));
   col = mix(col, fogCol, clamp(fog, 0.0, 0.92));
 
   // --- Horizon limb glow ---

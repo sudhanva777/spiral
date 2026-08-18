@@ -118,11 +118,15 @@ const HEIGHT_MAP_W = 768;
 const HEIGHT_MAP_H = 384;
 
 // ============================================================================
-// AURELIA SURFACE EXPERIENCE
+// PLANETARY SURFACE EXPERIENCE
 //
 // Continuous descent: orbit -> cloud deck -> surface -> night sky.
 // The sky dome derives its galaxy band from the planet's actual position
 // inside IC 1579 — the night sky IS the galaxy.
+//
+// The surface palette (oceans, land, rock, snow, bioluminescence, haze) is
+// derived per-planet from the PlanetConfig colors, so every habitable world
+// keeps the IC 1579 emerald/teal language but reads as its own place.
 // ============================================================================
 export class SurfaceExperience {
   public group: THREE.Group;
@@ -185,6 +189,28 @@ export class SurfaceExperience {
     // Align the surface experience with the planet's axial tilt so that the
     // terrain poles and the ring plane in the night sky match the orbit view.
     this.group.rotation.z = config.axialTilt || 0;
+
+    // ------------------------------------------------------------------
+    // 0. Per-planet surface palette — derived from the PlanetConfig colors
+    // ------------------------------------------------------------------
+    const primary = new THREE.Color(config.primaryColor || '#0A4A5A');
+    const secondary = new THREE.Color(config.secondaryColor || '#1E6B4E');
+    const accent = new THREE.Color(config.accentColor || '#9BE8C8');
+    const atmosphere = new THREE.Color(config.atmosphereColor || '#5EEAD4');
+    const white = new THREE.Color('#E8F4EE');
+
+    const oceanShallow = atmosphere.clone();
+    const oceanDeep = primary.clone().multiplyScalar(0.6);
+    const beach = accent.clone().lerp(new THREE.Color('#E8D9A8'), 0.55);
+    const forest = secondary.clone();
+    const deepForest = secondary.clone().multiplyScalar(0.55);
+    const rock = accent.clone().lerp(new THREE.Color('#6B6F6B'), 0.75);
+    const snow = white.clone().lerp(accent, 0.12);
+    const snowIce = white.clone().lerp(accent, 0.22);
+    const bioCol = accent.clone().lerp(new THREE.Color('#3EE0B8'), 0.4);
+    const fogCol = atmosphere.clone().multiplyScalar(0.75);
+    const zenithCol = atmosphere.clone().multiplyScalar(0.5);
+    const horizonCol = atmosphere.clone().multiplyScalar(0.85);
 
     // ------------------------------------------------------------------
     // 1. Bake the planet height map (elevation / detail / bioluminescence)
@@ -251,14 +277,24 @@ export class SurfaceExperience {
         uMapSize: { value: HEIGHT_MAP_W },
         uSunDir: { value: new THREE.Vector3(0, 1, 0) },
         uUp: { value: new THREE.Vector3(0, 1, 0) },
-        uZenithCol: { value: new THREE.Color(0.25, 0.55, 0.62) },
-        uHorizonCol: { value: new THREE.Color(0.42, 0.72, 0.66) },
+        uZenithCol: { value: zenithCol },
+        uHorizonCol: { value: horizonCol },
         uNightCol: { value: new THREE.Color(0.006, 0.013, 0.011) },
         uSunriseCol: { value: new THREE.Color(0.92, 0.68, 0.38) },
         uSunCol: { value: new THREE.Color(1.0, 0.98, 0.86) },
         uTime: { value: 0 },
         uSeaLevel: { value: this.seaLevel },
         uNightFactor: { value: 1.0 },
+        uOceanShallow: { value: oceanShallow },
+        uOceanDeep: { value: oceanDeep },
+        uBeach: { value: beach },
+        uForest: { value: forest },
+        uDeepForest: { value: deepForest },
+        uRock: { value: rock },
+        uSnow: { value: snow },
+        uSnowIce: { value: snowIce },
+        uBioCol: { value: bioCol },
+        uFogCol: { value: fogCol },
       },
     });
     this.terrainMesh = new THREE.Mesh(terrainGeom, this.terrainMaterial);
@@ -277,7 +313,7 @@ export class SurfaceExperience {
       side: THREE.FrontSide,
       uniforms: {
         uSunDir: { value: new THREE.Vector3(0, 1, 0) },
-        uCloudCol: { value: new THREE.Color(0.78, 0.94, 0.86) },
+        uCloudCol: { value: atmosphere.clone().lerp(white, 0.5) },
         uTime: { value: 0 },
         uCamDistFactor: { value: 1.0 },
         uOpacity: { value: 0.85 },
@@ -299,8 +335,8 @@ export class SurfaceExperience {
       uniforms: {
         uSunDir: { value: new THREE.Vector3(0, 1, 0) },
         uUp: { value: new THREE.Vector3(0, 1, 0) },
-        uZenithCol: { value: new THREE.Color(0.25, 0.55, 0.62) },
-        uHorizonCol: { value: new THREE.Color(0.42, 0.72, 0.66) },
+        uZenithCol: { value: zenithCol },
+        uHorizonCol: { value: horizonCol },
         uNightCol: { value: new THREE.Color(0.006, 0.013, 0.011) },
         uSunriseCol: { value: new THREE.Color(0.92, 0.68, 0.38) },
         uSunCol: { value: new THREE.Color(1.0, 0.98, 0.86) },
@@ -458,6 +494,27 @@ export class SurfaceExperience {
 
   public getTerrainScale(): number {
     return this.terrainScale;
+  }
+
+  /**
+   * CPU-side sample of the displaced terrain radius at a direction given in
+   * surface-local space (same UV mapping as the height-map bake). Used by the
+   * engine to keep the surface camera above the terrain while walking.
+   */
+  public sampleTerrainRadiusAt(localDir: THREE.Vector3, terrainScale: number): number {
+    const phi = Math.asin(THREE.MathUtils.clamp(localDir.y, -1, 1));
+    const theta = Math.atan2(localDir.z, localDir.x);
+    let u = theta / (Math.PI * 2.0);
+    if (u < 0) u += 1.0;
+    const v = phi / Math.PI + 0.5;
+
+    const x = Math.min(HEIGHT_MAP_W - 1, Math.max(0, Math.floor(u * HEIGHT_MAP_W)));
+    const y = Math.min(HEIGHT_MAP_H - 1, Math.max(0, Math.floor(v * HEIGHT_MAP_H)));
+    const data = this.heightTexture.image.data as Uint8Array;
+    const r = data[(y * HEIGHT_MAP_W + x) * 4] / 255;
+
+    const base = this.radius * 1.004;
+    return base * (1.0 + r * this.heightScale) * terrainScale;
   }
 
   public setPixelRatio(dpr: number) {

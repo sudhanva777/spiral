@@ -120,6 +120,24 @@ export class GalaxyEngine {
   // Double Tap Tracking (Mobile)
   private lastTapTime = 0;
 
+  // Hierarchical deep-exploration state (IC 1579 systems → habitable worlds)
+  private detectedPlanetId: string | null = null;
+  private detectedPlanetName: string | null = null;
+  private surfaceMoveKeys = new Set<string>();
+  private exitContext: {
+    pos: THREE.Vector3;
+    look: THREE.Vector3;
+    saved: boolean;
+  } = { pos: new THREE.Vector3(), look: new THREE.Vector3(), saved: false };
+
+  // Surface-walk scratch vectors
+  private tmpPlanetPos = new THREE.Vector3();
+  private tmpSurfaceDir = new THREE.Vector3();
+  private tmpSurfaceRight = new THREE.Vector3();
+  private tmpSurfaceMove = new THREE.Vector3();
+  private tmpPlanetLocalDir = new THREE.Vector3();
+  private tmpClampedPos = new THREE.Vector3();
+
   // Animation Timing & Entrance
   private clock = new THREE.Clock();
   private animationFrameId: number | null = null;
@@ -275,6 +293,7 @@ export class GalaxyEngine {
       this.camera.far = 120.0;
       this.controls.enablePan = false;
     } else {
+      this.camera.up.set(0, 1, 0);
       this.controls.enablePan = true;
       if (this.activeMoonId) {
         this.controls.minDistance = 0.015;
@@ -379,6 +398,8 @@ export class GalaxyEngine {
         activeMoonId: this.activeMoonId,
         detectedSystemId: this.detectedSystemId,
         detectedSystemName: this.detectedSystemName,
+        detectedPlanetId: this.detectedPlanetId,
+        detectedPlanetName: this.detectedPlanetName,
         timeScale: this.timeScale,
         scaleLevel: this.getScaleLevel(),
         navigationMode: this.computeNavigationMode(),
@@ -571,12 +592,22 @@ export class GalaxyEngine {
     const sys = galaxy.starSystems.getSystem(systemId);
     if (!sys) return;
 
+    // Remember where the user was inside IC 1579 (or the active galaxy) so
+    // EXIT SYSTEM returns them to that exact place, not to a new location.
+    if (!this.activeSystemId && !this.isOnSurface && !this.isTransitioningCamera) {
+      this.exitContext.pos.copy(this.camera.position);
+      this.exitContext.look.copy(this.controls.target);
+      this.exitContext.saved = true;
+    }
+
     this.activeGalaxyId = galaxy.config.id;
     this.activeSystemId = systemId;
     this.activePlanetId = null;
     this.activeMoonId = null;
     this.detectedSystemId = null;
     this.detectedSystemName = null;
+    this.detectedPlanetId = null;
+    this.detectedPlanetName = null;
     this.isInspectingCore = false;
     this.targetCoreInspection = 0.0;
     this.updateControlsScale();
@@ -613,6 +644,8 @@ export class GalaxyEngine {
     this.activeMoonId = null;
     this.detectedSystemId = null;
     this.detectedSystemName = null;
+    this.detectedPlanetId = null;
+    this.detectedPlanetName = null;
     this.isInspectingCore = false;
     this.updateControlsScale();
     this.setState('CORE_TRANSITION');
@@ -689,7 +722,24 @@ export class GalaxyEngine {
     this.activePlanetId = null;
     this.activeMoonId = null;
     this.updateControlsScale();
-    this.resetCamera();
+
+    // EXIT SYSTEM → back to the exact IC 1579 location from which the
+    // system was entered. Falls back to the galaxy overview.
+    if (this.exitContext.saved) {
+      this.startCameraTransition(this.exitContext.pos, this.exitContext.look, 1.4);
+      this.exitContext.saved = false;
+    } else {
+      this.resetCamera();
+    }
+  }
+
+  /**
+   * Direct cinematic entry to a habitable planet's surface: fly to the
+   * planet, then descend through its atmosphere to the surface.
+   */
+  public enterPlanetSurface(systemId: string, planetId: string) {
+    this.enterPlanet(systemId, planetId);
+    this.descendToSurface();
   }
 
   /**
@@ -796,6 +846,7 @@ export class GalaxyEngine {
     window.addEventListener('resize', this.onWindowResize, { passive: true });
     window.addEventListener('mousemove', this.onPointerMove, { passive: true });
     window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
 
     const canvas = this.renderer.domElement;
     canvas.addEventListener('pointerdown', this.onPointerDown, { passive: true });
@@ -1116,6 +1167,17 @@ export class GalaxyEngine {
     const active = document.activeElement;
     if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
 
+    const moveKey = e.key.toLowerCase();
+    if (
+      moveKey === 'w' || moveKey === 'a' || moveKey === 's' || moveKey === 'd' ||
+      moveKey === 'arrowup' || moveKey === 'arrowdown' ||
+      moveKey === 'arrowleft' || moveKey === 'arrowright'
+    ) {
+      this.surfaceMoveKeys.add(moveKey);
+      e.preventDefault();
+      return;
+    }
+
     if (e.key === 'Escape') {
       if (this.isOnSurface) {
         this.exitSurface();
@@ -1156,6 +1218,10 @@ export class GalaxyEngine {
     } else if (e.key === '0') {
       this.navigateToGalaxy('galaxy10');
     }
+  }
+
+  private onKeyUp(e: KeyboardEvent) {
+    this.surfaceMoveKeys.delete(e.key.toLowerCase());
   }
 
   public setPreset(preset: GalaxyPreset) {
@@ -1360,8 +1426,63 @@ export class GalaxyEngine {
       }
     }
 
+    // 6c. Surface free-camera walk — the visitor moves across the world.
+    if (this.isOnSurface && this.surfaceExperience && this.surfaceRadius > 0 && !this.isTransitioningCamera) {
+      const walkGalaxy = this.getActiveGalaxy();
+      const walkSys = walkGalaxy?.starSystems?.getSystem(this.activeSystemId || '');
+      const walkPlanet = walkSys?.planets.find((p) => p.config.id === this.activePlanetId);
+      if (walkPlanet) {
+        walkPlanet.group.getWorldPosition(this.tmpPlanetPos);
+        const upDir = this.tmpSurfaceDir.copy(this.camera.position).sub(this.tmpPlanetPos).normalize();
+        this.camera.up.copy(upDir);
+
+        if (this.surfaceMoveKeys.size > 0) {
+          const fwd = this.camera.getWorldDirection(this.tmpPlanetLocalDir);
+          fwd.addScaledVector(upDir, -fwd.dot(upDir));
+          if (fwd.lengthSq() < 0.0001) fwd.set(0, 0, -1);
+          fwd.normalize();
+          const right = this.tmpSurfaceRight.crossVectors(upDir, fwd);
+          const move = this.tmpSurfaceMove.set(0, 0, 0);
+          if (this.surfaceMoveKeys.has('w') || this.surfaceMoveKeys.has('arrowup')) move.add(fwd);
+          if (this.surfaceMoveKeys.has('s') || this.surfaceMoveKeys.has('arrowdown')) move.sub(fwd);
+          if (this.surfaceMoveKeys.has('d') || this.surfaceMoveKeys.has('arrowright')) move.add(right);
+          if (this.surfaceMoveKeys.has('a') || this.surfaceMoveKeys.has('arrowleft')) move.sub(right);
+          if (move.lengthSq() > 0) {
+            // Planetary-scale walking speed (world radii per second)
+            move.normalize().multiplyScalar(this.surfaceRadius * 1.5 * rawDelta);
+            this.controls.target.add(move);
+          }
+        }
+      }
+    }
+
     // 7. Update OrbitControls
     this.controls.update();
+
+    // 7a. Surface terrain-following clamp — never walk through mountains.
+    if (this.isOnSurface && this.surfaceExperience && this.surfaceRadius > 0) {
+      const clampGalaxy = this.getActiveGalaxy();
+      const clampSys = clampGalaxy?.starSystems?.getSystem(this.activeSystemId || '');
+      const clampPlanet = clampSys?.planets.find((p) => p.config.id === this.activePlanetId);
+      if (clampPlanet) {
+        clampPlanet.group.getWorldPosition(this.tmpPlanetPos);
+        const camLocal = this.tmpCamLocal.copy(this.camera.position).sub(this.tmpPlanetPos);
+        const dist = camLocal.length();
+        const dir = camLocal.normalize();
+        this.tmpPlanetLocalDir.copy(dir);
+        this.surfaceExperience.group.worldToLocal(this.tmpPlanetLocalDir);
+        const terrainR = this.surfaceExperience.sampleTerrainRadiusAt(
+          this.tmpPlanetLocalDir,
+          this.surfaceExperience.getTerrainScale()
+        );
+        const minDist = Math.max(terrainR + this.surfaceRadius * 0.02, this.surfaceRadius * 1.02);
+        if (dist < minDist) {
+          this.tmpClampedPos.copy(this.tmpPlanetPos).addScaledVector(dir, minDist);
+          this.controls.target.add(this.tmpClampedPos.clone().sub(this.camera.position));
+          this.camera.position.copy(this.tmpClampedPos);
+        }
+      }
+    }
 
     // 7b. AETHER ↔ IC 1579 separation dynamics
     const ic1579Galaxy = this.galaxies.get(this.ic1579GalaxyId);
@@ -1481,6 +1602,38 @@ export class GalaxyEngine {
       }
     }
 
+    // 10b. Proximity Detection for Habitable Worlds inside the active system
+    if (this.activeSystemId && !this.activePlanetId && !this.isOnSurface && !this.isTransitioningCamera) {
+      const proxGalaxy = this.getActiveGalaxy();
+      const proxSys = proxGalaxy?.starSystems?.getSystem(this.activeSystemId);
+      if (proxGalaxy?.starSystems && proxSys) {
+        let closestPlanetId: string | null = null;
+        let closestPlanetName: string | null = null;
+        let closestDist = Infinity;
+        const pPos = new THREE.Vector3();
+        for (const planet of proxSys.planets) {
+          if (!planet.config.surfaceExplore) continue;
+          planet.group.getWorldPosition(pPos);
+          const dist = this.camera.position.distanceTo(pPos);
+          const detectRadius = Math.max(planet.config.radius * 18.0, 0.7);
+          if (dist < detectRadius && dist < closestDist) {
+            closestDist = dist;
+            closestPlanetId = planet.config.id;
+            closestPlanetName = planet.config.name;
+          }
+        }
+        if (closestPlanetId && this.detectedPlanetId !== closestPlanetId) {
+          this.detectedPlanetId = closestPlanetId;
+          this.detectedPlanetName = closestPlanetName;
+          this.emitUniverseState();
+        } else if (!closestPlanetId && this.detectedPlanetId !== null) {
+          this.detectedPlanetId = null;
+          this.detectedPlanetName = null;
+          this.emitUniverseState();
+        }
+      }
+    }
+
     // 10. Update Environment Subsystems
     this.nebula.update(effectiveTime, this.entranceProgress);
     this.starfield.update(effectiveTime, this.entranceProgress);
@@ -1550,6 +1703,7 @@ export class GalaxyEngine {
     window.removeEventListener('resize', this.onWindowResize);
     window.removeEventListener('mousemove', this.onPointerMove);
     window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
 
     const canvas = this.renderer.domElement;
     canvas.removeEventListener('pointerdown', this.onPointerDown);

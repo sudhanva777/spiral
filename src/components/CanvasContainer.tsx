@@ -131,6 +131,12 @@ export const CanvasContainer: React.FC = () => {
     }
   };
 
+  const handleEnterPlanetSurface = (systemId: string, planetId: string) => {
+    if (engineRef.current) {
+      engineRef.current.enterPlanetSurface(systemId, planetId);
+    }
+  };
+
   const handleExitSurface = () => {
     if (engineRef.current) {
       engineRef.current.exitSurface();
@@ -163,6 +169,7 @@ export const CanvasContainer: React.FC = () => {
         onExitStarSystem={handleExitStarSystem}
         onSetTimeScale={handleSetTimeScale}
         onDescendToSurface={handleDescendToSurface}
+        onEnterPlanetSurface={handleEnterPlanetSurface}
         onExitSurface={handleExitSurface}
       />
     </div>
