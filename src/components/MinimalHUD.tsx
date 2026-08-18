@@ -25,8 +25,17 @@ import {
 import type { GalaxyPreset, InteractionState, QualityTier, SimulationStats } from '../types/simulation';
 import type { UniverseState } from '../types/universe';
 import { UNIVERSE_GALAXIES, getGalaxyConfigById } from '../webgl/galaxies/registry';
+import { getCosmicObjectById } from '../webgl/cosmic/cosmicObjectRegistry';
 import { PRIME_GALAXY_STAR_SYSTEMS, getStarSystemById, getStarSystemsForGalaxy } from '../webgl/starsystems/starSystemRegistry';
 import { soundSynthesizer } from './SoundSynthesizer';
+
+const COSMIC_OBJECT_TYPE_LABEL: Record<string, string> = {
+  NEBULA: 'STAR-FORMING NEBULA',
+  COSMIC_RIDGE: 'MOLECULAR-CLOUD RIDGE',
+  MOLECULAR_CLOUD: 'GIANT MOLECULAR PILLARS',
+  PULSAR: 'RAPIDLY ROTATING NEUTRON STAR',
+  BLACK_HOLE_BINARY: 'MERGING BLACK-HOLE PAIR',
+};
 
 const DISCOVERY_TAG_LABEL: Record<string, { label: string; color: string }> = {
   flagship: { label: 'FLAGSHIP // RINGED OCEANIC WORLD', color: 'text-emerald-300' },
@@ -39,6 +48,7 @@ const DISCOVERY_TAG_LABEL: Record<string, { label: string; color: string }> = {
 
 const NAVIGATION_MODE_LABEL: Record<string, string> = {
   AETHER: 'AETHER // THE SPACE BETWEEN GALAXIES',
+  COSMIC_DESTINATION: 'UNIVERSAL // COSMIC PHENOMENA',
   IC1579_APPROACH: 'IC 1579 // APPROACH',
   IC1579_GALAXY: 'IC 1579 // DEEP SPIRAL',
   IC1579_STELLAR: 'IC 1579 // STELLAR INTERIOR',
@@ -155,6 +165,8 @@ interface MinimalHUDProps {
   onDescendToSurface?: () => void;
   onEnterPlanetSurface?: (systemId: string, planetId: string) => void;
   onExitSurface?: () => void;
+  onEnterCosmicObject?: (objectId: string) => void;
+  onExitCosmicObject?: () => void;
 }
 
 export const MinimalHUD: React.FC<MinimalHUDProps> = ({
@@ -179,12 +191,15 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
   onDescendToSurface,
   onEnterPlanetSurface,
   onExitSurface,
+  onEnterCosmicObject,
+  onExitCosmicObject,
 }) => {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isControlsExpanded, setIsControlsExpanded] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [dismissedPromptSystemId, setDismissedPromptSystemId] = useState<string | null>(null);
+  const [dismissedPromptCosmicId, setDismissedPromptCosmicId] = useState<string | null>(null);
 
   const isCoreInspecting = interactionState === 'CORE_INSPECTION' || interactionState === 'CORE_TRANSITION';
   const activeGalaxy = getGalaxyConfigById(universeState.activeGalaxyId);
@@ -223,6 +238,23 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
 
   const showDetectedPlanetPrompt =
     detectedPlanet && !universeState.activePlanetId && !isOnSurface && !universeState.isNavigating;
+
+  const activeCosmicObject = universeState.activeCosmicObjectId
+    ? getCosmicObjectById(universeState.activeCosmicObjectId)
+    : undefined;
+
+  const showDetectedCosmicPrompt =
+    universeState.detectedCosmicObjectId &&
+    universeState.detectedCosmicObjectId !== dismissedPromptCosmicId &&
+    !universeState.activeCosmicObjectId &&
+    !universeState.activeSystemId &&
+    !universeState.activePlanetId &&
+    !isOnSurface &&
+    !universeState.isNavigating;
+
+  const detectedCosmicType = universeState.detectedCosmicObjectId
+    ? getCosmicObjectById(universeState.detectedCosmicObjectId).type
+    : null;
 
   const timeScale = universeState.timeScale !== undefined ? universeState.timeScale : 1.0;
 
@@ -342,6 +374,20 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
                 <Moon className="w-3.5 h-3.5 mr-1 text-amber-300 inline" />
                 {activeMoon.name.toUpperCase()}
               </span>
+            </>
+          )}
+
+          {activeCosmicObject && (
+            <>
+              <span className="breadcrumb-separator">&gt;</span>
+              <button
+                onClick={() => onExitCosmicObject && onExitCosmicObject()}
+                className="breadcrumb-leaf text-fuchsia-300 animate-pulse"
+                title="Exit Cosmic Phenomenon"
+              >
+                <Sparkles className="w-3.5 h-3.5 mr-1 text-fuchsia-300 inline" />
+                {activeCosmicObject.name.toUpperCase()}
+              </button>
             </>
           )}
 
@@ -490,6 +536,17 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
             </button>
           )}
 
+          {activeCosmicObject && onExitCosmicObject && (
+            <button
+              onClick={onExitCosmicObject}
+              className="hud-btn active"
+              title="Return to AETHER (ESC)"
+              aria-label="Exit Cosmic Phenomenon"
+            >
+              <ArrowLeft className="w-4 h-4 text-fuchsia-300" />
+            </button>
+          )}
+
           {onToggleCoreInspection && !activeSystem && (
             <button
               onClick={onToggleCoreInspection}
@@ -604,6 +661,40 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
                 className="prompt-btn-enter"
               >
                 ENTER PLANET
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* UNIVERSAL Cosmic Phenomenon Discovery — approach from AETHER */}
+      {showDetectedCosmicPrompt && (
+        <div className="star-system-prompt-banner pointer-events-auto animate-fade-in">
+          <div className="prompt-content">
+            <Sparkles className="w-5 h-5 text-fuchsia-300 animate-pulse mr-2.5" />
+            <div className="prompt-text">
+              <span className="prompt-title text-fuchsia-300">COSMIC PHENOMENA DETECTED</span>
+              <span className="prompt-sub">
+                {universeState.detectedCosmicObjectName?.toUpperCase()} //{' '}
+                {COSMIC_OBJECT_TYPE_LABEL[detectedCosmicType || ''] || 'DEEP-SPACE STRUCTURE'}
+              </span>
+            </div>
+            <div className="prompt-actions">
+              <button
+                onClick={() => {
+                  if (universeState.detectedCosmicObjectId && onEnterCosmicObject) {
+                    onEnterCosmicObject(universeState.detectedCosmicObjectId);
+                  }
+                }}
+                className="prompt-btn-enter"
+              >
+                APPROACH
+              </button>
+              <button
+                onClick={() => setDismissedPromptCosmicId(universeState.detectedCosmicObjectId || null)}
+                className="prompt-btn-skip"
+              >
+                CONTINUE FLYING
               </button>
             </div>
           </div>
@@ -879,6 +970,8 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           <span>
             {isOnSurface
               ? `${activePlanet?.name.toUpperCase() || 'PLANET'} SURFACE // NIGHT SKY = IC 1579 FROM THIS WORLD • WASD / ARROWS — WALK • DRAG — LOOK AROUND • SCROLL — CLIMB • ESC — EXIT PLANET`
+              : activeCosmicObject
+              ? `INSPECTING ${activeCosmicObject.name.toUpperCase()} // ${COSMIC_OBJECT_TYPE_LABEL[activeCosmicObject.type] || 'DEEP-SPACE STRUCTURE'} • DRAG — ORBIT • SCROLL — ZOOM • ESC — RETURN TO AETHER`
               : activeMoon
               ? `INSPECTING ${activeMoon.name.toUpperCase()} (MOON OF ${activePlanet?.name.toUpperCase()}) • DRAG — ORBIT • ESC / BACK — EXIT MOON`
               : activePlanet

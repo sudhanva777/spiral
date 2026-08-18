@@ -111,15 +111,59 @@ export type ScaleLevel =
  * Explicit navigation state separating the AETHER cosmic overview
  * from IC 1579 (the destination galaxy) and every depth inside it.
  * AETHER = the space between destinations. IC 1579 = the destination.
+ * COSMIC_DESTINATION = focused on a Universal-level phenomenon
+ * (nebula, ridge, molecular pillars, pulsar, black-hole binary).
  */
 export type NavigationMode =
   | 'AETHER' // Deep-space overview between galaxies
+  | 'COSMIC_DESTINATION' // Focused on a Universal-level cosmic phenomenon
   | 'IC1579_APPROACH' // Cinematic flight toward the distant galaxy
   | 'IC1579_GALAXY' // Outside IC 1579, seeing it as an object
   | 'IC1579_STELLAR' // Inside the galaxy, between its stars
   | 'IC1579_SYSTEM' // Inside a star system within IC 1579
   | 'IC1579_PLANET' // Orbiting a planet/moon within IC 1579
   | 'IC1579_SURFACE'; // Landed on a surface, night sky = IC 1579
+
+/**
+ * Common cosmic-object classification — every Universal-level phenomenon
+ * (and every existing galaxy/star/planet) maps to one of these types so
+ * the interaction & navigation systems can treat them uniformly.
+ */
+export type CosmicObjectType =
+  | 'GALAXY'
+  | 'STAR'
+  | 'PLANET'
+  | 'NEBULA'
+  | 'MOLECULAR_CLOUD'
+  | 'COSMIC_RIDGE'
+  | 'PULSAR'
+  | 'BLACK_HOLE'
+  | 'BLACK_HOLE_BINARY'
+  | 'STAR_CLUSTER'
+  | 'GALAXY_CLUSTER'
+  | 'COSMIC_FILAMENT';
+
+export interface CosmicObjectControls {
+  minDistance: number;
+  maxDistance: number;
+  zoomSpeed?: number;
+  panSpeed?: number;
+  near?: number;
+  far?: number;
+}
+
+export interface CosmicObjectConfig {
+  id: string;
+  name: string;
+  subtitle: string;
+  description: string;
+  type: CosmicObjectType;
+  position: [number, number, number];
+  boundingRadius: number;
+  detectionRadius: number;
+  approachOffset: [number, number, number];
+  controls: CosmicObjectControls;
+}
 
 export interface SurfaceState {
   isLanded: boolean;
@@ -142,6 +186,10 @@ export interface UniverseState {
   detectedSystemName?: string | null;
   detectedPlanetId?: string | null;
   detectedPlanetName?: string | null;
+  activeCosmicObjectId?: string | null;
+  detectedCosmicObjectId?: string | null;
+  detectedCosmicObjectName?: string | null;
+  cosmicObjectType?: CosmicObjectType | null;
   timeScale?: number;
   scaleLevel?: ScaleLevel;
   navigationMode?: NavigationMode;

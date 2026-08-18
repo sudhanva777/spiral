@@ -4,6 +4,8 @@ import { NebulaParticles } from './particles/NebulaParticles';
 import { StarfieldParticles } from './particles/StarfieldParticles';
 import { ForegroundDustParticles } from './particles/ForegroundDustParticles';
 import { CosmicWeb } from './cosmic/CosmicWeb';
+import { CosmicObjectManager } from './cosmic/CosmicObjectManager';
+import { getCosmicObjectById } from './cosmic/cosmicObjectRegistry';
 import { GalaxyInstance } from './galaxies/GalaxyInstance';
 import { UNIVERSE_GALAXIES } from './galaxies/registry';
 import { PostProcessingPipeline } from './PostProcessing';
@@ -11,6 +13,7 @@ import { SurfaceExperience } from './starsystems/surface/SurfaceExperience';
 import { getQualityConfigForTier } from './utils/deviceDetection';
 import type { GalaxyPreset, InteractionState, QualityTier, SimulationStats } from '../types/simulation';
 import type { NavigationMode, UniverseState, ScaleLevel } from '../types/universe';
+import { soundSynthesizer } from '../components/SoundSynthesizer';
 
 export class GalaxyEngine {
   private container: HTMLElement;
@@ -44,6 +47,17 @@ export class GalaxyEngine {
   private starfield: StarfieldParticles;
   private foregroundDust: ForegroundDustParticles;
   private cosmicWeb: CosmicWeb;
+
+  // UNIVERSAL — cosmic phenomena living directly in AETHER space
+  private cosmicObjects: CosmicObjectManager;
+  private activeCosmicObjectId: string | null = null;
+  private detectedCosmicObjectId: string | null = null;
+  private detectedCosmicObjectName: string | null = null;
+  private cosmicObjectExitContext: {
+    pos: THREE.Vector3;
+    look: THREE.Vector3;
+    saved: boolean;
+  } = { pos: new THREE.Vector3(), look: new THREE.Vector3(), saved: false };
 
   // AETHER ↔ IC 1579 separation state
   private readonly ic1579GalaxyId = 'galaxy17';
@@ -138,6 +152,10 @@ export class GalaxyEngine {
   private tmpPlanetLocalDir = new THREE.Vector3();
   private tmpClampedPos = new THREE.Vector3();
 
+  // Navigation debug log — records every mode transition once
+  private lastLoggedNavMode: NavigationMode | null = null;
+  private lastPulsarTickTime = 0;
+
   // Animation Timing & Entrance
   private clock = new THREE.Clock();
   private animationFrameId: number | null = null;
@@ -224,6 +242,14 @@ export class GalaxyEngine {
     this.cosmicWeb = new CosmicWeb(16000);
     this.scene.add(this.cosmicWeb.points);
 
+    // 5c. UNIVERSAL cosmic phenomena — star-forming nebula, ember ridge,
+    // molecular pillar region, pulsar and black-hole binary, distributed
+    // through the intentional empty regions of AETHER.
+    this.cosmicObjects = new CosmicObjectManager(this.qualityTier);
+    this.cosmicObjects.setPixelRatio(config.dpr);
+    this.cosmicObjects.onMerger = () => this.synthesizerMergerThump();
+    this.scene.add(this.cosmicObjects.group);
+
     // AETHER starts dark and quiet: dim global environment until a galaxy
     // (IC 1579) pulls the camera in, at which point the galaxy's own dense
     // emerald particles own the scene.
@@ -284,6 +310,21 @@ export class GalaxyEngine {
   }
 
   private updateControlsScale() {
+    if (this.activeCosmicObjectId) {
+      // UNIVERSAL phenomenon focus — per-object framing ranges
+      const cosmicCfg = getCosmicObjectById(this.activeCosmicObjectId);
+      this.camera.up.set(0, 1, 0);
+      this.controls.enablePan = true;
+      this.controls.minDistance = cosmicCfg.controls.minDistance;
+      this.controls.maxDistance = cosmicCfg.controls.maxDistance;
+      this.controls.zoomSpeed = cosmicCfg.controls.zoomSpeed ?? 0.4;
+      this.controls.panSpeed = cosmicCfg.controls.panSpeed ?? 0.3;
+      this.camera.near = cosmicCfg.controls.near ?? 0.1;
+      this.camera.far = cosmicCfg.controls.far ?? 2000.0;
+      this.camera.updateProjectionMatrix();
+      return;
+    }
+
     if (this.isOnSurface && this.surfaceRadius > 0) {
       this.controls.minDistance = this.surfaceRadius * 1.02;
       this.controls.maxDistance = this.surfaceRadius * 16.0;
@@ -386,6 +427,13 @@ export class GalaxyEngine {
         }
       }
 
+      if (this.activeCosmicObjectId) {
+        const cosmicObj = this.cosmicObjects.getObject(this.activeCosmicObjectId);
+        if (cosmicObj) {
+          dist = Math.round(cosmicObj.group.position.distanceTo(this.camera.position));
+        }
+      }
+
       this.universeStateCallback({
         activeGalaxyId: this.activeGalaxyId,
         isNavigating: this.isTransitioningCamera,
@@ -400,12 +448,22 @@ export class GalaxyEngine {
         detectedSystemName: this.detectedSystemName,
         detectedPlanetId: this.detectedPlanetId,
         detectedPlanetName: this.detectedPlanetName,
+        activeCosmicObjectId: this.activeCosmicObjectId,
+        detectedCosmicObjectId: this.detectedCosmicObjectId,
+        detectedCosmicObjectName: this.detectedCosmicObjectName,
+        cosmicObjectType: this.activeCosmicObjectId ? getCosmicObjectById(this.activeCosmicObjectId).type : null,
         timeScale: this.timeScale,
         scaleLevel: this.getScaleLevel(),
         navigationMode: this.computeNavigationMode(),
         surfaceState: this.getSurfaceState(),
         activeDiscoveryTag: this.getActiveDiscoveryTag(),
       });
+
+      const navMode = this.computeNavigationMode();
+      if (navMode !== this.lastLoggedNavMode) {
+        console.debug(`[Navigation] ${navMode} (${this.activeSystemId ?? '-'}/${this.activePlanetId ?? '-'}/${this.activeMoonId ?? '-'})`);
+        this.lastLoggedNavMode = navMode;
+      }
     }
   }
 
@@ -453,6 +511,7 @@ export class GalaxyEngine {
    * (approach → object view → stellar interior → systems → worlds → surface).
    */
   public computeNavigationMode(): NavigationMode {
+    if (this.activeCosmicObjectId) return 'COSMIC_DESTINATION';
     if (this.isOnSurface) return 'IC1579_SURFACE';
     if (this.activeMoonId || this.activePlanetId) return 'IC1579_PLANET';
     if (this.activeSystemId) return 'IC1579_SYSTEM';
@@ -523,6 +582,12 @@ export class GalaxyEngine {
     this.activeMoonId = null;
     this.detectedSystemId = null;
     this.detectedSystemName = null;
+    this.detectedPlanetId = null;
+    this.detectedPlanetName = null;
+    this.activeCosmicObjectId = null;
+    this.detectedCosmicObjectId = null;
+    this.detectedCosmicObjectName = null;
+    this.cosmicObjectExitContext.saved = false;
     this.isInspectingCore = false;
     this.targetCoreInspection = 0.0;
     this.updateControlsScale();
@@ -587,10 +652,16 @@ export class GalaxyEngine {
     if (this.isOnSurface) this.exitSurface();
 
     const galaxy = this.getActiveGalaxy();
-    if (!galaxy || !galaxy.starSystems) return;
+    if (!galaxy || !galaxy.starSystems) {
+      console.error('[Navigation] ENTER SYSTEM failed — active galaxy has no star systems');
+      return;
+    }
 
     const sys = galaxy.starSystems.getSystem(systemId);
-    if (!sys) return;
+    if (!sys) {
+      console.error('[Navigation] ENTER SYSTEM failed — unknown system id', systemId);
+      return;
+    }
 
     // Remember where the user was inside IC 1579 (or the active galaxy) so
     // EXIT SYSTEM returns them to that exact place, not to a new location.
@@ -608,6 +679,9 @@ export class GalaxyEngine {
     this.detectedSystemName = null;
     this.detectedPlanetId = null;
     this.detectedPlanetName = null;
+    this.activeCosmicObjectId = null;
+    this.detectedCosmicObjectId = null;
+    this.detectedCosmicObjectName = null;
     this.isInspectingCore = false;
     this.targetCoreInspection = 0.0;
     this.updateControlsScale();
@@ -630,13 +704,22 @@ export class GalaxyEngine {
     if (this.isOnSurface) this.exitSurface();
 
     const galaxy = this.getActiveGalaxy();
-    if (!galaxy || !galaxy.starSystems) return;
+    if (!galaxy || !galaxy.starSystems) {
+      console.error('[Navigation] ENTER PLANET failed — active galaxy has no star systems');
+      return;
+    }
 
     const sys = galaxy.starSystems.getSystem(systemId);
-    if (!sys) return;
+    if (!sys) {
+      console.error('[Navigation] ENTER PLANET failed — unknown system id', systemId);
+      return;
+    }
 
     const planetWorldPos = sys.getPlanetPositionWorld(planetId);
-    if (!planetWorldPos) return;
+    if (!planetWorldPos) {
+      console.error('[Navigation] ENTER PLANET failed — unknown planet id', systemId, planetId);
+      return;
+    }
 
     this.activeGalaxyId = galaxy.config.id;
     this.activeSystemId = systemId;
@@ -646,6 +729,9 @@ export class GalaxyEngine {
     this.detectedSystemName = null;
     this.detectedPlanetId = null;
     this.detectedPlanetName = null;
+    this.activeCosmicObjectId = null;
+    this.detectedCosmicObjectId = null;
+    this.detectedCosmicObjectName = null;
     this.isInspectingCore = false;
     this.updateControlsScale();
     this.setState('CORE_TRANSITION');
@@ -664,13 +750,22 @@ export class GalaxyEngine {
     if (this.isOnSurface) this.exitSurface();
 
     const galaxy = this.getActiveGalaxy();
-    if (!galaxy || !galaxy.starSystems) return;
+    if (!galaxy || !galaxy.starSystems) {
+      console.error('[Navigation] ENTER MOON failed — active galaxy has no star systems');
+      return;
+    }
 
     const sys = galaxy.starSystems.getSystem(systemId);
-    if (!sys) return;
+    if (!sys) {
+      console.error('[Navigation] ENTER MOON failed — unknown system id', systemId);
+      return;
+    }
 
     const moonWorldPos = sys.getMoonPositionWorld(planetId, moonId);
-    if (!moonWorldPos) return;
+    if (!moonWorldPos) {
+      console.error('[Navigation] ENTER MOON failed — unknown moon id', systemId, planetId, moonId);
+      return;
+    }
 
     this.activeGalaxyId = galaxy.config.id;
     this.activeSystemId = systemId;
@@ -678,6 +773,9 @@ export class GalaxyEngine {
     this.activeMoonId = moonId;
     this.detectedSystemId = null;
     this.detectedSystemName = null;
+    this.activeCosmicObjectId = null;
+    this.detectedCosmicObjectId = null;
+    this.detectedCosmicObjectName = null;
     this.isInspectingCore = false;
     this.updateControlsScale();
     this.setState('CORE_TRANSITION');
@@ -734,10 +832,93 @@ export class GalaxyEngine {
   }
 
   /**
+   * Enter a Universal-level cosmic phenomenon (nebula, ridge, pillars,
+   * pulsar, black-hole binary). Saves the AETHER position from which the
+   * visitor approached so EXIT returns them to that exact spot.
+   */
+  public enterCosmicObject(objectId: string) {
+    if (this.isOnSurface) this.exitSurface();
+
+    const obj = this.cosmicObjects.getObject(objectId);
+    if (!obj) {
+      console.error('[Navigation] ENTER COSMIC OBJECT failed — unknown object id', objectId);
+      return;
+    }
+
+    if (!this.activeCosmicObjectId && !this.isTransitioningCamera) {
+      this.cosmicObjectExitContext.pos.copy(this.camera.position);
+      this.cosmicObjectExitContext.look.copy(this.controls.target);
+      this.cosmicObjectExitContext.saved = true;
+    }
+
+    this.activeSystemId = null;
+    this.activePlanetId = null;
+    this.activeMoonId = null;
+    this.detectedSystemId = null;
+    this.detectedSystemName = null;
+    this.detectedPlanetId = null;
+    this.detectedPlanetName = null;
+    this.activeCosmicObjectId = objectId;
+    this.detectedCosmicObjectId = null;
+    this.detectedCosmicObjectName = null;
+    this.isInspectingCore = false;
+    this.targetCoreInspection = 0.0;
+    this.updateControlsScale();
+    this.setState('CORE_TRANSITION');
+
+    const cosmicCfg = getCosmicObjectById(objectId);
+    const targetPos = new THREE.Vector3()
+      .copy(obj.group.position)
+      .add(new THREE.Vector3(...cosmicCfg.approachOffset));
+    const targetLook = new THREE.Vector3().copy(obj.group.position);
+
+    const flightDist = this.camera.position.distanceTo(targetPos);
+    const flightDuration = Math.min(Math.max(flightDist * 0.02, 1.2), 2.6);
+
+    this.startCameraTransition(targetPos, targetLook, flightDuration);
+    this.emitUniverseState();
+  }
+
+  /**
+   * Exit a cosmic phenomenon back to the AETHER position from which it
+   * was approached — or to the AETHER vantage if no context was saved.
+   */
+  public exitCosmicObject() {
+    if (!this.activeCosmicObjectId) return;
+
+    const objectName = getCosmicObjectById(this.activeCosmicObjectId).name;
+    this.activeCosmicObjectId = null;
+    this.detectedCosmicObjectId = null;
+    this.detectedCosmicObjectName = null;
+    this.updateControlsScale();
+    this.setState('RETURNING');
+
+    if (this.cosmicObjectExitContext.saved) {
+      this.startCameraTransition(this.cosmicObjectExitContext.pos, this.cosmicObjectExitContext.look, 1.4);
+      this.cosmicObjectExitContext.saved = false;
+    } else {
+      this.startCameraTransition(this.aetherVantagePos, this.aetherVantageLook, 2.0);
+    }
+    console.debug(`[Navigation] EXIT ${objectName.toUpperCase()} → AETHER`);
+    this.emitUniverseState();
+  }
+
+  private synthesizerMergerThump() {
+    soundSynthesizer.mergerThump();
+  }
+
+  private synthesizerPulsarTick() {
+    soundSynthesizer.pulsarTick();
+  }
+
+  /**
    * Direct cinematic entry to a habitable planet's surface: fly to the
    * planet, then descend through its atmosphere to the surface.
    */
   public enterPlanetSurface(systemId: string, planetId: string) {
+    // Rapid-click guard: a second click while the descent is in flight
+    // must not tear down and rebuild the surface scene.
+    if (this.isOnSurface) return;
     this.enterPlanet(systemId, planetId);
     this.descendToSurface();
   }
@@ -842,6 +1023,7 @@ export class GalaxyEngine {
     this.onPointerUp = this.onPointerUp.bind(this);
     this.onDoubleClick = this.onDoubleClick.bind(this);
     this.onKeyDown = this.onKeyDown.bind(this);
+    this.onKeyUp = this.onKeyUp.bind(this);
 
     window.addEventListener('resize', this.onWindowResize, { passive: true });
     window.addEventListener('mousemove', this.onPointerMove, { passive: true });
@@ -872,6 +1054,7 @@ export class GalaxyEngine {
     this.starfield.setPixelRatio(config.dpr);
     this.foregroundDust.setPixelRatio(config.dpr);
     this.cosmicWeb.setPixelRatio(config.dpr);
+    this.cosmicObjects.setPixelRatio(config.dpr);
     this.surfaceExperience?.setPixelRatio(config.dpr);
   }
 
@@ -952,6 +1135,15 @@ export class GalaxyEngine {
       const hitSys = activeGalaxy.starSystems.findIntersectedSystem(ray);
       if (hitSys) {
         this.enterStarSystem(hitSys.config.id);
+        return;
+      }
+    }
+
+    // 3b. UNIVERSAL phenomena — a direct click on a cosmic object approaches it
+    if (!this.activeCosmicObjectId && !this.activeSystemId) {
+      const hitCosmic = this.cosmicObjects.getHit(ray);
+      if (hitCosmic) {
+        this.enterCosmicObject(hitCosmic.id);
         return;
       }
     }
@@ -1121,6 +1313,11 @@ export class GalaxyEngine {
   }
 
   public resetCamera() {
+    if (this.activeCosmicObjectId) {
+      this.exitCosmicObject();
+      return;
+    }
+
     const active = this.getActiveGalaxy();
     if (!active) return;
 
@@ -1183,6 +1380,8 @@ export class GalaxyEngine {
         this.exitSurface();
       } else if (this.activeMoonId || this.activePlanetId || this.activeSystemId) {
         this.exitStarSystem();
+      } else if (this.activeCosmicObjectId) {
+        this.exitCosmicObject();
       }
     } else if (e.key === 'r' || e.key === 'R') {
       if (this.isOnSurface) {
@@ -1247,6 +1446,9 @@ export class GalaxyEngine {
     this.starfield.rebuild(config.starCount);
     this.foregroundDust.rebuild(config.foregroundDustCount);
 
+    this.cosmicObjects.setQualityTier(tier);
+    this.cosmicObjects.setPixelRatio(config.dpr);
+
     this.postProcessing.setBloomParams(config.bloomStrength, config.bloomRadius);
     this.postProcessing.setEnabled(config.bloomEnabled);
   }
@@ -1268,6 +1470,7 @@ export class GalaxyEngine {
     total += this.nebula.points.geometry.attributes.position ? this.nebula.points.geometry.attributes.position.count : 0;
     total += this.foregroundDust.points.geometry.attributes.position ? this.foregroundDust.points.geometry.attributes.position.count : 0;
     total += this.cosmicWeb.points.geometry.attributes.position ? this.cosmicWeb.points.geometry.attributes.position.count : 0;
+    total += this.cosmicObjects.getParticleCount();
     return total;
   }
 
@@ -1634,11 +1837,48 @@ export class GalaxyEngine {
       }
     }
 
+    // 10c. Proximity Detection for UNIVERSAL cosmic phenomena
+    if (
+      !this.activeCosmicObjectId &&
+      !this.activeSystemId &&
+      !this.activePlanetId &&
+      !this.activeMoonId &&
+      !this.isOnSurface &&
+      !this.isTransitioningCamera
+    ) {
+      const closestCosmic = this.cosmicObjects.getClosestDetected(this.camera.position);
+      if (closestCosmic && this.detectedCosmicObjectId !== closestCosmic.config.id) {
+        this.detectedCosmicObjectId = closestCosmic.config.id;
+        this.detectedCosmicObjectName = closestCosmic.config.name;
+        this.emitUniverseState();
+      } else if (!closestCosmic && this.detectedCosmicObjectId !== null) {
+        this.detectedCosmicObjectId = null;
+        this.detectedCosmicObjectName = null;
+        this.emitUniverseState();
+      }
+    }
+
     // 10. Update Environment Subsystems
     this.nebula.update(effectiveTime, this.entranceProgress);
     this.starfield.update(effectiveTime, this.entranceProgress);
     this.foregroundDust.update(effectiveTime, this.entranceProgress);
     this.cosmicWeb.update(effectiveTime, 1.0);
+
+    // 10d. UNIVERSAL phenomena — continuous events (merger cycle, pulsar
+    // sweep) + distance-based LOD intensities.
+    this.cosmicObjects.update(effectiveTime, rawDelta, this.camera.position);
+
+    // Subtle proximity audio: the pulsar ticks when observed up close.
+    if (this.activeCosmicObjectId === 'pulsar-x9') {
+      const pulsar = this.cosmicObjects.getObject('pulsar-x9');
+      if (pulsar && this.camera.position.distanceTo(pulsar.group.position) < 26.0) {
+        const now = performance.now();
+        if (now - this.lastPulsarTickTime > 420) {
+          this.lastPulsarTickTime = now;
+          this.synthesizerPulsarTick();
+        }
+      }
+    }
 
     // 11. Update Relativistic Gravitational Lensing in Post-Processing
     if (activeGalaxy && activeGalaxy.config.hasBlackHole && activeGalaxy.config.blackHoleConfig) {
@@ -1719,6 +1959,7 @@ export class GalaxyEngine {
     this.starfield.dispose();
     this.foregroundDust.dispose();
     this.cosmicWeb.dispose();
+    this.cosmicObjects.dispose();
     this.postProcessing.dispose();
     this.renderer.dispose();
 

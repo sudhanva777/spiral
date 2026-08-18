@@ -90,6 +90,46 @@ export class SoundSynthesizer {
   public getIsPlaying(): boolean {
     return this.isPlaying;
   }
+
+  // ------------------------------------------------------------------
+  // UNIVERSAL phenomenon audio — subtle, contextual, never musical.
+  // ------------------------------------------------------------------
+
+  /** Very quiet high blip — the pulsar lighthouse crossing the line of sight. */
+  public pulsarTick() {
+    if (!this.ctx || !this.isPlaying) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1150.0, t);
+    osc.frequency.exponentialRampToValueAtTime(620.0, t + 0.07);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.05, t + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    osc.connect(gain);
+    gain.connect(this.masterGain!);
+    osc.start(t);
+    osc.stop(t + 0.1);
+  }
+
+  /** Short low-frequency event at merger — then silence. */
+  public mergerThump() {
+    if (!this.ctx || !this.isPlaying) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(38.0, t);
+    osc.frequency.exponentialRampToValueAtTime(24.0, t + 0.9);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.16, t + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
+    osc.connect(gain);
+    gain.connect(this.masterGain!);
+    osc.start(t);
+    osc.stop(t + 1.5);
+  }
 }
 
 export const soundSynthesizer = new SoundSynthesizer();

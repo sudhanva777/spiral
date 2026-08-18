@@ -143,6 +143,18 @@ export const CanvasContainer: React.FC = () => {
     }
   };
 
+  const handleEnterCosmicObject = (objectId: string) => {
+    if (engineRef.current) {
+      engineRef.current.enterCosmicObject(objectId);
+    }
+  };
+
+  const handleExitCosmicObject = () => {
+    if (engineRef.current) {
+      engineRef.current.exitCosmicObject();
+    }
+  };
+
   if (!hasWebGL) {
     return <WebGLFallback />;
   }
@@ -171,6 +183,8 @@ export const CanvasContainer: React.FC = () => {
         onDescendToSurface={handleDescendToSurface}
         onEnterPlanetSurface={handleEnterPlanetSurface}
         onExitSurface={handleExitSurface}
+        onEnterCosmicObject={handleEnterCosmicObject}
+        onExitCosmicObject={handleExitCosmicObject}
       />
     </div>
   );
