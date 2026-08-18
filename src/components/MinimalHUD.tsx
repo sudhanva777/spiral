@@ -27,6 +27,7 @@ import type { UniverseState } from '../types/universe';
 import { UNIVERSE_GALAXIES, getGalaxyConfigById } from '../webgl/galaxies/registry';
 import { getCosmicObjectById } from '../webgl/cosmic/cosmicObjectRegistry';
 import { PRIME_GALAXY_STAR_SYSTEMS, getStarSystemById, getStarSystemsForGalaxy } from '../webgl/starsystems/starSystemRegistry';
+import { GREEN_STAR_SYSTEM_ID, GEMINI_PLANET_ID } from '../webgl/starsystems/ic1579StarSystems';
 import { soundSynthesizer } from './SoundSynthesizer';
 
 const COSMIC_OBJECT_TYPE_LABEL: Record<string, string> = {
@@ -602,10 +603,22 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
       {showDetectedPrompt && (
         <div className="star-system-prompt-banner pointer-events-auto animate-fade-in">
           <div className="prompt-content">
-            <Radio className="w-5 h-5 text-amber-400 animate-pulse mr-2.5" />
+            {universeState.detectedSystemId === GREEN_STAR_SYSTEM_ID ? (
+              <Sun className="w-5 h-5 text-emerald-300 animate-pulse mr-2.5" />
+            ) : (
+              <Radio className="w-5 h-5 text-amber-400 animate-pulse mr-2.5" />
+            )}
             <div className="prompt-text">
-              <span className="prompt-title">STAR SYSTEM DETECTED</span>
-              <span className="prompt-sub">{universeState.detectedSystemName || 'Approaching Stellar System'}</span>
+              <span className={`prompt-title ${universeState.detectedSystemId === GREEN_STAR_SYSTEM_ID ? 'text-emerald-300' : ''}`}>
+                {universeState.detectedSystemId === GREEN_STAR_SYSTEM_ID
+                  ? 'GREEN STAR // STELLAR SYSTEM DETECTED'
+                  : 'STAR SYSTEM DETECTED'}
+              </span>
+              <span className="prompt-sub">
+                {universeState.detectedSystemId === GREEN_STAR_SYSTEM_ID
+                  ? 'IC 1579 // GEMINI HOME SYSTEM'
+                  : universeState.detectedSystemName || 'Approaching Stellar System'}
+              </span>
             </div>
             <div className="prompt-actions">
               <button
@@ -650,17 +663,26 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           <div className="prompt-content">
             <Globe2 className="w-5 h-5 text-emerald-300 animate-pulse mr-2.5" />
             <div className="prompt-text">
-              <span className="prompt-title text-emerald-300">HABITABLE WORLD DETECTED</span>
-              <span className="prompt-sub">
-                {detectedPlanet.name.toUpperCase()} // {detectedPlanet.subtitle.toUpperCase()}
-              </span>
+              {detectedPlanet.id === GEMINI_PLANET_ID ? (
+                <>
+                  <span className="prompt-title text-emerald-300">GEMINI</span>
+                  <span className="prompt-sub">HABITABLE WORLD • RINGED PLANET</span>
+                </>
+              ) : (
+                <>
+                  <span className="prompt-title text-emerald-300">HABITABLE WORLD DETECTED</span>
+                  <span className="prompt-sub">
+                    {detectedPlanet.name.toUpperCase()} // {detectedPlanet.subtitle.toUpperCase()}
+                  </span>
+                </>
+              )}
             </div>
             <div className="prompt-actions">
               <button
                 onClick={() => onEnterPlanetSurface && onEnterPlanetSurface(activeSystem.id, detectedPlanet.id)}
                 className="prompt-btn-enter"
               >
-                ENTER PLANET
+                {detectedPlanet.id === GEMINI_PLANET_ID ? 'ENTER GEMINI' : 'ENTER PLANET'}
               </button>
             </div>
           </div>
@@ -724,7 +746,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           <div className="surface-banner-actions">
             {onExitSurface && (
               <button onClick={onExitSurface} className="prompt-btn-skip">
-                EXIT PLANET // RETURN TO ORBIT
+                {activePlanet?.id === GEMINI_PLANET_ID ? 'EXIT GEMINI' : 'EXIT PLANET // RETURN TO ORBIT'}
               </button>
             )}
           </div>
@@ -844,7 +866,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
             <span className={`system-title-tag ${isIC1579 ? 'text-emerald-300' : 'text-purple-300'}`}>
               <Sparkles className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
               {isIC1579
-                ? 'IC 1579 EMERALD DEEP-SPIRAL // 10 DISCOVERABLE SYSTEMS • 5 HABITABLE WORLDS'
+                ? 'IC 1579 EMERALD DEEP-SPIRAL // 11 DISCOVERABLE SYSTEMS • 6 HABITABLE WORLDS'
                 : 'PRIME GALAXY STELLAR SYSTEMS (4 SYSTEMS DISCOVERABLE)'}
             </span>
           </div>
@@ -969,7 +991,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           <div className="pulse-dot" />
           <span>
             {isOnSurface
-              ? `${activePlanet?.name.toUpperCase() || 'PLANET'} SURFACE // NIGHT SKY = IC 1579 FROM THIS WORLD • WASD / ARROWS — WALK • DRAG — LOOK AROUND • SCROLL — CLIMB • ESC — EXIT PLANET`
+              ? `${activePlanet?.name.toUpperCase() || 'PLANET'} SURFACE // NIGHT SKY = IC 1579 FROM THIS WORLD • WASD / ARROWS — WALK${activePlanet?.surfaceGravity ? ' • SPACE — LOW-GRAVITY JUMP' : ''} • DRAG — LOOK AROUND • SCROLL — CLIMB • ESC — EXIT PLANET`
               : activeCosmicObject
               ? `INSPECTING ${activeCosmicObject.name.toUpperCase()} // ${COSMIC_OBJECT_TYPE_LABEL[activeCosmicObject.type] || 'DEEP-SPACE STRUCTURE'} • DRAG — ORBIT • SCROLL — ZOOM • ESC — RETURN TO AETHER`
               : activeMoon
@@ -979,7 +1001,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
               : activeSystem
               ? `STAR SYSTEM // ${activeSystem.name.toUpperCase()} • CLICK PLANETS TO DIVE IN • ESC / BACK — EXIT TO GALAXY`
               : isIC1579
-              ? `IC 1579 // EMERALD DEEP SPIRAL • DIVE INTO DISCOVERABLE SYSTEMS (10) & HABITABLE WORLDS (5) • C / DOUBLE-CLICK — INSPECT CORE • R — LEAVE GALAXY / RETURN TO AETHER`
+              ? `IC 1579 // EMERALD DEEP SPIRAL • DIVE INTO DISCOVERABLE SYSTEMS (11) & HABITABLE WORLDS (6) • C / DOUBLE-CLICK — INSPECT CORE • R — LEAVE GALAXY / RETURN TO AETHER`
               : universeState.detectedBlackHole
               ? `SUPERMASSIVE BLACK HOLE FIELD • GRAVITATIONAL LENSING & WARPED ACCRETION ARCS • C / DOUBLE-CLICK — INSPECT CORE`
               : 'ZOOM INTO PRIME GALAXY FOR STAR SYSTEMS OR TRAVEL TO GALAXIES [02–16] FOR SUPERMASSIVE BLACK HOLES'}

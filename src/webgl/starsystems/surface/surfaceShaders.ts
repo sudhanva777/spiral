@@ -420,3 +420,44 @@ void main() {
   gl_FragColor = vec4(vColor * glow * 1.6, glow * vAlpha);
 }
 `;
+
+// ---------------------------------------------------------------------------
+// 5. VEGETATION — instanced canopy scatter on land, with wind sway
+// ---------------------------------------------------------------------------
+export const surfaceVegetationVertexShader = /* glsl */ `
+attribute vec3 aColor;
+attribute float aSize;
+attribute float aPhase;
+
+uniform float uPixelRatio;
+uniform float uTime;
+
+varying vec3 vColor;
+varying float vSway;
+
+void main() {
+  vColor = aColor;
+  vec3 p = position;
+  float sway = sin(uTime * (0.8 + fract(aPhase * 3.7) * 1.4) + aPhase * 6.2831);
+  p.x += sway * aSize * 0.25;
+  vSway = 0.5 + 0.5 * sway;
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  gl_Position = projectionMatrix * mv;
+  gl_PointSize = aSize * uPixelRatio * (300.0 / max(1.0, -mv.z));
+}
+`;
+
+export const surfaceVegetationFragmentShader = /* glsl */ `
+uniform float uNightFactor;
+
+varying vec3 vColor;
+varying float vSway;
+
+void main() {
+  float d = length(gl_PointCoord - vec2(0.5));
+  float a = smoothstep(0.5, 0.1, d);
+  vec3 col = vColor * (0.3 + 0.7 * vSway);
+  col *= 1.0 - uNightFactor * 0.88;
+  gl_FragColor = vec4(col, a * (0.85 - uNightFactor * 0.5));
+}
+`;

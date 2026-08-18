@@ -138,6 +138,13 @@ export class GalaxyEngine {
   private detectedPlanetId: string | null = null;
   private detectedPlanetName: string | null = null;
   private surfaceMoveKeys = new Set<string>();
+
+  // GEMINI low-gravity surface physics (1.62 m/s² Moon-like, mapped to
+  // planet-radii per second). Zero gravity = existing free-walk worlds.
+  private surfaceGravity = 0; // planet-radii / s²
+  private surfaceJumpVelocity = 0; // planet-radii / s
+  private surfaceVerticalVelocity = 0; // planet-radii / s
+  private surfaceAltitude = 0; // planet-radii above the ground
   private exitContext: {
     pos: THREE.Vector3;
     look: THREE.Vector3;
@@ -939,6 +946,16 @@ export class GalaxyEngine {
 
     this.isOnSurface = true;
     this.surfaceRadius = planet.config.radius;
+    // GEMINI-style moon gravity: PlanetConfig.surfaceGravity in m/s² is
+    // mapped to planet-radii scale (×0.25) — walking stays comfortable
+    // while jumps feel light and floaty.
+    this.surfaceGravity = (planet.config.surfaceGravity ?? 0) * 0.25;
+    this.surfaceJumpVelocity =
+      this.surfaceGravity > 0
+        ? Math.sqrt(2.0 * this.surfaceGravity * (planet.config.surfaceJumpHeight ?? 0.16))
+        : 0;
+    this.surfaceVerticalVelocity = 0;
+    this.surfaceAltitude = 0;
     this.setState('CORE_TRANSITION');
 
     // Lazily build the surface experience (height-map bake happens once)
@@ -980,6 +997,10 @@ export class GalaxyEngine {
 
     this.isOnSurface = false;
     this.surfaceRadius = 0;
+    this.surfaceGravity = 0;
+    this.surfaceJumpVelocity = 0;
+    this.surfaceVerticalVelocity = 0;
+    this.surfaceAltitude = 0;
     if (this.surfaceExperience) this.surfaceExperience.setActive(false);
 
     const galaxy = this.getActiveGalaxy();
@@ -1394,8 +1415,15 @@ export class GalaxyEngine {
         this.toggleCoreInspection();
       }
     } else if (e.key === ' ' || e.code === 'Space') {
-      // Toggle observation slow-motion
-      this.setTimeScale(this.timeScale === 1.0 ? 0.25 : 1.0);
+      if (this.isOnSurface && this.surfaceGravity > 0 && this.surfaceAltitude <= 0.001 && !this.isTransitioningCamera) {
+        // Low-gravity leap (GEMINI) — Space doubles as the jump key while
+        // standing on a moon-gravity world.
+        e.preventDefault();
+        this.surfaceVerticalVelocity = this.surfaceJumpVelocity;
+      } else {
+        // Toggle observation slow-motion
+        this.setTimeScale(this.timeScale === 1.0 ? 0.25 : 1.0);
+      }
     } else if (e.key === '1') {
       this.navigateToGalaxy('galaxy01');
     } else if (e.key === '2') {
@@ -1687,7 +1715,30 @@ export class GalaxyEngine {
       }
     }
 
-    // 7b. AETHER ↔ IC 1579 separation dynamics
+    // 7b. GEMINI low-gravity jump physics — moon gravity (≈1.62 m/s²):
+    // the visitor leaves the ground, floats, and settles back slowly.
+    if (this.isOnSurface && this.surfaceGravity > 0 && this.surfaceExperience && this.surfaceRadius > 0) {
+      const gravGalaxy = this.getActiveGalaxy();
+      const gravSys = gravGalaxy?.starSystems?.getSystem(this.activeSystemId || '');
+      const gravPlanet = gravSys?.planets.find((p) => p.config.id === this.activePlanetId);
+      if (gravPlanet) {
+        gravPlanet.group.getWorldPosition(this.tmpPlanetPos);
+        const upDir = this.tmpSurfaceDir.copy(this.camera.position).sub(this.tmpPlanetPos).normalize();
+        this.surfaceVerticalVelocity -= this.surfaceGravity * rawDelta;
+        this.surfaceAltitude += this.surfaceVerticalVelocity * rawDelta;
+        if (this.surfaceAltitude <= 0.0 && this.surfaceVerticalVelocity <= 0.0) {
+          this.surfaceAltitude = 0.0;
+          this.surfaceVerticalVelocity = 0.0;
+        }
+        if (this.surfaceAltitude > 0.0) {
+          const lift = this.tmpClampedPos.copy(upDir).multiplyScalar(this.surfaceAltitude * this.surfaceRadius);
+          this.controls.target.add(lift);
+          this.camera.position.add(lift);
+        }
+      }
+    }
+
+    // 7c. AETHER ↔ IC 1579 separation dynamics
     const ic1579Galaxy = this.galaxies.get(this.ic1579GalaxyId);
     const distToIC1579 = ic1579Galaxy
       ? this.camera.position.distanceTo(ic1579Galaxy.worldPosition)

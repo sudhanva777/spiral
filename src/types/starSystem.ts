@@ -118,6 +118,15 @@ export interface PlanetConfig {
   isFlagship?: boolean;
   // IC 1579: planet supports atmospheric descent / surface exploration
   surfaceExplore?: boolean;
+  // GEMINI: surface gravity in m/s² (≈1.62 = Moon-like). Omit → existing
+  // free-walk surface behaviour with no jumping.
+  surfaceGravity?: number;
+  // GEMINI: jump apex height in planet radii (low-gravity worlds only)
+  surfaceJumpHeight?: number;
+  // GEMINI: full day/night rotation length in sim-seconds (20 min = 1200)
+  surfaceDayLength?: number;
+  // GEMINI: scattered vegetation instances (omit → no vegetation, as today)
+  surfaceVegetationCount?: number;
 }
 
 export interface StarConfig {

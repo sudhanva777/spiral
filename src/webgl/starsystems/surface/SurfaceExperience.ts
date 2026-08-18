@@ -13,6 +13,8 @@ import {
   surfaceSkyFragmentShader,
   surfaceStarVertexShader,
   surfaceStarFragmentShader,
+  surfaceVegetationVertexShader,
+  surfaceVegetationFragmentShader,
 } from './surfaceShaders';
 
 // ============================================================================
@@ -159,6 +161,15 @@ export class SurfaceExperience {
   private readonly seaLevel = -0.16;
   private readonly domeRadius: number;
 
+  // GEMINI-style worlds can override the default ~26 s day with a full
+  // day/night cycle (e.g. 1200 s = 20 real minutes at 1x time scale).
+  private readonly dayLength: number;
+
+  // Optional scattered vegetation (instanced canopy points on land)
+  private vegPoints: THREE.Points | null = null;
+  private vegGeometry: THREE.BufferGeometry | null = null;
+  private vegMaterial: THREE.ShaderMaterial | null = null;
+
   // Per-frame scratch
   private tmpV = new THREE.Vector3();
   private tmpV2 = new THREE.Vector3();
@@ -182,6 +193,7 @@ export class SurfaceExperience {
     const R = config.radius;
     this.radius = R;
     this.domeRadius = R * 55.0;
+    this.dayLength = config.surfaceDayLength ?? (Math.PI * 2.0) / 0.24;
     this.galaxyRef = galaxyGroup;
     this.moons = moons;
     this.group = new THREE.Group();
@@ -473,8 +485,101 @@ export class SurfaceExperience {
     this.starPoints.frustumCulled = false;
     this.group.add(this.starPoints);
 
+    // ------------------------------------------------------------------
+    // 7. Vegetation — instanced canopy scatter on land (GEMINI worlds)
+    // ------------------------------------------------------------------
+    this.buildVegetation(config.surfaceVegetationCount ?? 0, forest, deepForest, bioCol);
+
     this.group.visible = false;
     planetGroup.add(this.group);
+  }
+
+  /**
+   * Scatter vegetation points across land regions of the baked height map.
+   * Placement is CPU-side and deterministic per bake (random seed).
+   */
+  private buildVegetation(
+    count: number,
+    forest: THREE.Color,
+    deepForest: THREE.Color,
+    bioCol: THREE.Color
+  ) {
+    if (count <= 0) return;
+    const R = this.radius;
+    const positions = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+    const phases = new Float32Array(count);
+    const colors = new Float32Array(count * 3);
+    const dir = new THREE.Vector3();
+
+    let accepted = 0;
+    let attempts = 0;
+    while (accepted < count && attempts < count * 8) {
+      attempts++;
+      const u = Math.random() * 2.0 - 1.0;
+      const theta = Math.random() * Math.PI * 2.0;
+      const rxy = Math.sqrt(1.0 - u * u);
+      dir.set(rxy * Math.cos(theta), u, rxy * Math.sin(theta));
+
+      // Only land: sea level sits at normalized height 0.42 in the baked map.
+      if (this.sampleHeightNorm(dir) < 0.44) continue;
+
+      const terrainR = this.sampleTerrainRadiusAt(dir, 1.0);
+      const scale = 0.9 + Math.random() * 0.45;
+      const placeR = terrainR + R * 0.004 * scale;
+      positions[accepted * 3] = dir.x * placeR;
+      positions[accepted * 3 + 1] = dir.y * placeR;
+      positions[accepted * 3 + 2] = dir.z * placeR;
+      sizes[accepted] = R * (0.05 + 0.05 * Math.random()) * scale;
+      phases[accepted] = Math.random() * Math.PI * 2.0;
+
+      const roll = Math.random();
+      const base = roll < 0.4 ? forest : roll < 0.75 ? deepForest : bioCol;
+      const lum = 0.75 + Math.random() * 0.35;
+      colors[accepted * 3] = base.r * lum;
+      colors[accepted * 3 + 1] = base.g * lum;
+      colors[accepted * 3 + 2] = base.b * lum;
+      accepted++;
+    }
+    if (accepted === 0) return;
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('aColor', new THREE.BufferAttribute(colors, 3));
+    geo.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+    geo.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
+    geo.setDrawRange(0, accepted);
+
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: surfaceVegetationVertexShader,
+      fragmentShader: surfaceVegetationFragmentShader,
+      transparent: true,
+      depthWrite: false,
+      uniforms: {
+        uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) },
+        uTime: { value: 0 },
+        uNightFactor: { value: 1.0 },
+      },
+    });
+
+    const points = new THREE.Points(geo, mat);
+    points.frustumCulled = false;
+    this.group.add(points);
+    this.vegPoints = points;
+    this.vegGeometry = geo;
+    this.vegMaterial = mat;
+  }
+
+  private sampleHeightNorm(dir: THREE.Vector3): number {
+    const phi = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1));
+    const theta = Math.atan2(dir.z, dir.x);
+    let u = theta / (Math.PI * 2.0);
+    if (u < 0) u += 1.0;
+    const v = phi / Math.PI + 0.5;
+    const x = Math.min(HEIGHT_MAP_W - 1, Math.max(0, Math.floor(u * HEIGHT_MAP_W)));
+    const y = Math.min(HEIGHT_MAP_H - 1, Math.max(0, Math.floor(v * HEIGHT_MAP_H)));
+    const data = this.heightTexture.image.data as Uint8Array;
+    return data[(y * HEIGHT_MAP_W + x) * 4] / 255;
   }
 
   public setActive(active: boolean) {
@@ -520,6 +625,9 @@ export class SurfaceExperience {
   public setPixelRatio(dpr: number) {
     this.bandMaterial.uniforms.uPixelRatio.value = dpr;
     this.starMaterial.uniforms.uPixelRatio.value = dpr;
+    if (this.vegMaterial) {
+      this.vegMaterial.uniforms.uPixelRatio.value = dpr;
+    }
   }
 
   private rotateSpin(v: THREE.Vector3): THREE.Vector3 {
@@ -538,7 +646,9 @@ export class SurfaceExperience {
     const R = this.radius;
 
     // --- Planet spin angle (drives the day/night cycle) ---
-    this.spin = time * 0.24;
+    // Default worlds keep the original fast cycle; GEMINI-style worlds can
+    // configure a full day (surfaceDayLength seconds for one rotation).
+    this.spin = (time / this.dayLength) * Math.PI * 2.0;
 
     // --- Camera distance from planet center (in planet radii) ---
     this.tmpV.copy(camera.position);
@@ -606,6 +716,10 @@ export class SurfaceExperience {
     this.bandMaterial.uniforms.uNightFactor.value = nightFactor;
     this.starMaterial.uniforms.uTime.value = time;
     this.starMaterial.uniforms.uNightFactor.value = nightFactor;
+    if (this.vegMaterial) {
+      this.vegMaterial.uniforms.uTime.value = time;
+      this.vegMaterial.uniforms.uNightFactor.value = nightFactor;
+    }
 
     // --- Rebuild galaxy band particle positions (planet-orbit parallax) ---
     // Planet center position in galaxy-local space (not the camera — the sky
@@ -700,6 +814,13 @@ export class SurfaceExperience {
     this.bandMaterial.dispose();
     this.starPoints.geometry.dispose();
     this.starMaterial.dispose();
+    if (this.vegPoints && this.vegGeometry && this.vegMaterial) {
+      this.vegPoints.geometry.dispose();
+      this.vegMaterial.dispose();
+      this.vegGeometry = null;
+      this.vegMaterial = null;
+      this.vegPoints = null;
+    }
     this.heightTexture.dispose();
   }
 }
