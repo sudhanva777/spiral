@@ -18,7 +18,7 @@ export const CanvasContainer: React.FC = () => {
     drawCalls: 4,
     tier: 'ultra',
     mouseNormalized: { x: 0, y: 0 },
-    cameraDistance: 44,
+    cameraDistance: 158,
   });
 
   const [interactionState, setInteractionState] = useState<InteractionState>('CINEMATIC');

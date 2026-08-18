@@ -116,7 +116,7 @@ export function generateGalaxyParticles(
   const morphologyType = config.morphology.type;
   const numArms = config.morphology.armCount || 2;
   const spiralTightness = config.morphology.spiralTightness || 3.2;
-  const isLarge = config.id === 'galaxy06' || config.id === 'galaxy16';
+  const isLarge = config.id === 'galaxy06' || config.id === 'galaxy16' || config.id === 'galaxy17';
   const maxRadius = isLarge ? 54.0 : 40.0;
   const vThicknessMult = config.morphology.verticalThickness || 1.0;
   const palette = config.palette;
@@ -460,10 +460,12 @@ export function generateGalaxyParticles(
         col = mixRgb(rgbDust, rgbDust2, Math.random());
       }
 
-    } else if (morphologyType === 'emerald-multi-arm' || morphologyType === 'multi-arm-grand') {
+    } else if (morphologyType === 'emerald-multi-arm' || morphologyType === 'multi-arm-grand' || morphologyType === 'ic1579-emerald-spiral') {
       // =======================================================================
       // MULTI-ARM GRAND SPIRALS (Galaxies 03 Verdant, 12 Viridis, 16 Aurelia)
+      // + IC 1579 — Emerald Deep-Spiral (living ecosystem galaxy)
       // =======================================================================
+      const isIC1579 = config.id === 'galaxy17';
       if (p < 0.25) {
         layer = 0;
         branch = 2.0;
@@ -488,7 +490,7 @@ export function generateGalaxyParticles(
           col = mixRgb(rgbInner, rgbDeep, (coreNorm - 0.65) / 0.35);
         }
 
-      } else if (p < 0.77) {
+      } else if (p < (isIC1579 ? 0.80 : 0.77)) {
         layer = p < 0.48 ? 1 : 2;
         const armPick = Math.random();
         const armIndex = Math.floor(armPick * numArms);
@@ -516,7 +518,7 @@ export function generateGalaxyParticles(
         }
 
         const armNorm = Math.min(radius / maxRadius, 1.0);
-        if (nearestClusterDist < 2.2) {
+        if (nearestClusterDist < (isIC1579 ? 2.8 : 2.2)) {
           col = mixRgb(rgbStarForm, rgbStarFormWarm, Math.random());
           luminosity *= 2.2;
           size *= 1.4;
@@ -531,7 +533,7 @@ export function generateGalaxyParticles(
           else col = mixRgb(rgbArm2, rgbDust, (armNorm - 0.85) / 0.15);
         }
 
-      } else if (p < 0.88) {
+      } else if (p < (isIC1579 ? 0.91 : 0.88)) {
         layer = 3;
         radius = 4.0 + Math.random() * (maxRadius * 0.85);
         const angle = Math.random() * Math.PI * 2.0;
@@ -683,13 +685,17 @@ export function generateNebulaParticles(count: number) {
   const phases = new Float32Array(count);
   const colors = new Float32Array(count * 3);
 
+  // AETHER environment identity: faint, cold, deep-blue cosmic gas.
+  // The bright purple/magenta tones are removed so the deep space between
+  // galaxies reads dark and quiet, while IC 1579's emerald interior owns
+  // the saturated color.
   const nebulaColors = [
-    [0.15, 0.07, 0.24],
-    [0.45, 0.15, 0.65],
-    [0.75, 0.25, 0.85],
-    [0.18, 0.35, 0.85],
-    [0.08, 0.20, 0.55],
-    [0.05, 0.25, 0.18],
+    [0.020, 0.035, 0.085],
+    [0.035, 0.055, 0.125],
+    [0.015, 0.028, 0.070],
+    [0.040, 0.060, 0.110],
+    [0.012, 0.030, 0.090],
+    [0.028, 0.050, 0.070],
   ];
 
   for (let i = 0; i < count; i++) {
@@ -720,13 +726,16 @@ export function generateStarfieldParticles(count: number) {
   const twinklePhases = new Float32Array(count);
   const colors = new Float32Array(count * 3);
 
+  // Sparse AETHER starfield: mostly cool white-blue tints at moderate
+  // brightness so deep space stays dark and quiet (IC 1579 supplies the
+  // dense, saturated stellar environment when approached).
   const starTints = [
-    [1.0, 1.0, 1.0],
-    [0.85, 0.90, 1.0],
-    [0.70, 0.80, 1.0],
-    [1.0, 0.90, 0.80],
-    [0.95, 0.80, 1.0],
-    [0.85, 1.0, 0.88],
+    [0.85, 0.88, 1.0],
+    [0.70, 0.78, 1.0],
+    [0.60, 0.72, 0.95],
+    [0.92, 0.88, 0.82],
+    [0.80, 0.78, 1.0],
+    [0.78, 0.92, 0.88],
   ];
 
   for (let i = 0; i < count; i++) {
@@ -760,12 +769,15 @@ export function generateForegroundDustParticles(count: number) {
   const phases = new Float32Array(count);
   const colors = new Float32Array(count * 3);
 
+  // Faint interstellar haze — barely-there cool tint. The gap between
+  // AETHER and IC 1579 is intentionally empty, so only the faintest
+  // foreground dust is permitted.
   const dustTints = [
-    [0.85, 0.70, 0.95],
-    [0.70, 0.85, 1.00],
-    [1.00, 0.85, 0.75],
-    [0.75, 1.00, 0.85],
-    [0.60, 0.50, 0.90],
+    [0.30, 0.35, 0.45],
+    [0.28, 0.40, 0.50],
+    [0.38, 0.36, 0.30],
+    [0.25, 0.42, 0.38],
+    [0.24, 0.28, 0.40],
   ];
 
   for (let i = 0; i < count; i++) {

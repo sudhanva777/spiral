@@ -29,6 +29,7 @@ export class CosmicWeb {
     const pB = new THREE.Vector3(...COSMIC_GROUPS[1].center);
     const pC = new THREE.Vector3(...COSMIC_GROUPS[2].center);
     const pD = new THREE.Vector3(...COSMIC_GROUPS[3].center);
+    const pE = new THREE.Vector3(...COSMIC_GROUPS[4].center);
 
     // Filament Arcs Connecting the Cosmic Web
     const filaments = [
@@ -38,6 +39,9 @@ export class CosmicWeb {
       { start: pC, end: pD, mid: new THREE.Vector3(80, 55, -220), col1: [0.95, 0.65, 0.15], col2: [0.15, 0.85, 0.95] },
       { start: pA, end: pD, mid: new THREE.Vector3(85, 12, -75), col1: [0.15, 0.45, 0.95], col2: [0.95, 0.85, 0.35] },
       { start: pB, end: pC, mid: new THREE.Vector3(45, 20, -40), col1: [0.85, 0.25, 0.45], col2: [0.45, 0.25, 0.85] },
+      // Faint emerald-cyan filament arcing from the Local Cluster toward IC 1579 —
+      // the only large-scale structure along the intentional empty gap.
+      { start: pA, end: pE, mid: new THREE.Vector3(-165, 30, -85), col1: [0.10, 0.55, 0.55], col2: [0.15, 0.75, 0.65] },
     ];
 
     const particlesPerFilament = Math.floor(particleCount / filaments.length);
@@ -96,6 +100,7 @@ export class CosmicWeb {
         uTime: { value: 0 },
         uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) },
         uLODFactor: { value: 1.0 },
+        uIntensity: { value: 0.5 },
       },
     });
 
@@ -106,6 +111,10 @@ export class CosmicWeb {
   public update(time: number, lodFactor = 1.0) {
     this.material.uniforms.uTime.value = time;
     this.material.uniforms.uLODFactor.value = lodFactor;
+  }
+
+  public setIntensity(intensity: number) {
+    this.material.uniforms.uIntensity.value = intensity;
   }
 
   public setPixelRatio(dpr: number) {

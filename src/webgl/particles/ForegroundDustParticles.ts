@@ -28,6 +28,7 @@ export class ForegroundDustParticles {
         uTime: { value: 0 },
         uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) },
         uEntranceProgress: { value: 0.0 },
+        uIntensity: { value: 0.5 },
       },
     });
 
@@ -38,6 +39,10 @@ export class ForegroundDustParticles {
   public update(time: number, entranceProgress: number) {
     this.material.uniforms.uTime.value = time;
     this.material.uniforms.uEntranceProgress.value = entranceProgress;
+  }
+
+  public setIntensity(intensity: number) {
+    this.material.uniforms.uIntensity.value = intensity;
   }
 
   public setPixelRatio(dpr: number) {

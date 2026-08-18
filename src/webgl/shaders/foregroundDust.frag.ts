@@ -3,6 +3,8 @@ varying vec3 vColor;
 varying float vAlpha;
 varying float vDepth;
 
+uniform float uIntensity;
+
 void main() {
   vec2 coord = gl_PointCoord - vec2(0.5);
   float r = length(coord);
@@ -22,7 +24,7 @@ void main() {
   float farFade = smoothstep(90.0, 45.0, vDepth);
   float depthFade = nearFade * farFade;
 
-  float finalAlpha = shape * vAlpha * depthFade * 0.45;
+  float finalAlpha = shape * vAlpha * depthFade * 0.45 * uIntensity;
 
   gl_FragColor = vec4(vColor, clamp(finalAlpha, 0.0, 1.0));
 }

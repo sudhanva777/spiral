@@ -3,13 +3,14 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { NebulaParticles } from './particles/NebulaParticles';
 import { StarfieldParticles } from './particles/StarfieldParticles';
 import { ForegroundDustParticles } from './particles/ForegroundDustParticles';
+import { CosmicWeb } from './cosmic/CosmicWeb';
 import { GalaxyInstance } from './galaxies/GalaxyInstance';
 import { UNIVERSE_GALAXIES } from './galaxies/registry';
 import { PostProcessingPipeline } from './PostProcessing';
 import { SurfaceExperience } from './starsystems/surface/SurfaceExperience';
 import { getQualityConfigForTier } from './utils/deviceDetection';
 import type { GalaxyPreset, InteractionState, QualityTier, SimulationStats } from '../types/simulation';
-import type { UniverseState, ScaleLevel } from '../types/universe';
+import type { NavigationMode, UniverseState, ScaleLevel } from '../types/universe';
 
 export class GalaxyEngine {
   private container: HTMLElement;
@@ -42,6 +43,26 @@ export class GalaxyEngine {
   private nebula: NebulaParticles;
   private starfield: StarfieldParticles;
   private foregroundDust: ForegroundDustParticles;
+  private cosmicWeb: CosmicWeb;
+
+  // AETHER ↔ IC 1579 separation state
+  private readonly ic1579GalaxyId = 'galaxy17';
+  private ic1579ApproachActive = false;
+  private camTransitionQueue: Array<{
+    targetPos: THREE.Vector3;
+    targetLook: THREE.Vector3;
+    duration: number;
+  }> = [];
+  private navigationMode: NavigationMode = 'AETHER';
+
+  // Scene background color — lerped from deep-space blue-black (AETHER)
+  // toward dark teal-black as the camera crosses into IC 1579.
+  private readonly aetherBackground = new THREE.Color(0x020208);
+  private readonly ic1579Background = new THREE.Color(0x031a1c);
+
+  // Environment intensity targets (per navigation mode) & current values
+  private envIntensity = { nebula: 0.5, starfield: 0.65, dust: 0.4, web: 0.5 };
+  private ic1579Presence = 0.0;
 
   private qualityTier: QualityTier;
 
@@ -74,6 +95,8 @@ export class GalaxyEngine {
   // Camera & Navigation Offsets
   private readonly defaultCamOffset = new THREE.Vector3(0, 22, 38);
   private readonly defaultLookOffset = new THREE.Vector3(0, -1.0, 0);
+  private readonly aetherVantagePos = new THREE.Vector3(0, 48, 150);
+  private readonly aetherVantageLook = new THREE.Vector3(0, 0, 0);
   private readonly coreInspectOffset = new THREE.Vector3(0, 3.8, 8.5);
   private readonly blackHoleInspectOffset = new THREE.Vector3(0, 2.2, 5.8);
   private readonly starSystemCamOffset = new THREE.Vector3(0, 2.4, 5.5);
@@ -138,9 +161,11 @@ export class GalaxyEngine {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x020208);
 
-    // 2. Camera Setup
+    // 2. Camera Setup — AETHER overview vantage: far enough from Aether
+    // Prime to read as "the space between galaxies", with IC 1579 visible
+    // far in the distance as a small emerald structure.
     this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 2000);
-    this.camera.position.copy(this.defaultCamOffset);
+    this.camera.position.set(0, 48, 150);
     this.camera.lookAt(this.defaultLookOffset);
 
     // 3. Renderer Setup
@@ -175,6 +200,19 @@ export class GalaxyEngine {
     this.scene.add(this.starfield.points);
     this.scene.add(this.nebula.points);
     this.scene.add(this.foregroundDust.points);
+
+    // 5b. AETHER large-scale structure: faint cosmic-web filaments threading
+    // between galaxy groups (the only subtle structure in the deep gap).
+    this.cosmicWeb = new CosmicWeb(16000);
+    this.scene.add(this.cosmicWeb.points);
+
+    // AETHER starts dark and quiet: dim global environment until a galaxy
+    // (IC 1579) pulls the camera in, at which point the galaxy's own dense
+    // emerald particles own the scene.
+    this.nebula.setIntensity(0.5);
+    this.starfield.setIntensity(0.65);
+    this.foregroundDust.setIntensity(0.4);
+    this.cosmicWeb.setIntensity(0.5);
 
     // 6. Post-Processing Pipeline (Bloom, Relativistic Gravitational Lensing, Cosmic Vignette)
     this.postProcessing = new PostProcessingPipeline(
@@ -260,12 +298,40 @@ export class GalaxyEngine {
         this.camera.near = 0.05;
         this.camera.far = 800.0;
       } else {
-        this.controls.minDistance = 2.8;
-        this.controls.maxDistance = 600.0;
-        this.controls.zoomSpeed = 0.8;
-        this.controls.panSpeed = 0.7;
-        this.camera.near = 0.1;
-        this.camera.far = 2000.0;
+        // AETHER / galaxy-object scale
+        const active = this.getActiveGalaxy();
+        const isIC1579 = active?.config.id === this.ic1579GalaxyId;
+
+        if (isIC1579 && active) {
+          const distToIC1579 = this.camera.position.distanceTo(active.worldPosition);
+
+          if (distToIC1579 <= active.boundingRadius) {
+            // Inside the galaxy: deep-exploration navigation between its stars.
+            // Zoom range is capped so the user stays embedded in the stellar
+            // environment instead of drifting back out into AETHER.
+            this.controls.minDistance = 2.8;
+            this.controls.maxDistance = 240.0;
+            this.controls.zoomSpeed = 0.55;
+            this.controls.panSpeed = 0.5;
+            this.camera.near = 0.1;
+            this.camera.far = 2000.0;
+          } else {
+            // Approaching the distant galaxy: allow broad orbital framing.
+            this.controls.minDistance = 2.8;
+            this.controls.maxDistance = 520.0;
+            this.controls.zoomSpeed = 0.75;
+            this.controls.panSpeed = 0.6;
+            this.camera.near = 0.1;
+            this.camera.far = 2000.0;
+          }
+        } else {
+          this.controls.minDistance = 2.8;
+          this.controls.maxDistance = 600.0;
+          this.controls.zoomSpeed = 0.8;
+          this.controls.panSpeed = 0.7;
+          this.camera.near = 0.1;
+          this.camera.far = 2000.0;
+        }
       }
     }
     this.camera.updateProjectionMatrix();
@@ -315,6 +381,7 @@ export class GalaxyEngine {
         detectedSystemName: this.detectedSystemName,
         timeScale: this.timeScale,
         scaleLevel: this.getScaleLevel(),
+        navigationMode: this.computeNavigationMode(),
         surfaceState: this.getSurfaceState(),
         activeDiscoveryTag: this.getActiveDiscoveryTag(),
       });
@@ -356,6 +423,34 @@ export class GalaxyEngine {
     if (this.activeSystemId) return 'STELLAR';
     if (this.isInspectingCore) return 'GALAXY';
     return 'COSMOS';
+  }
+
+  /**
+   * AETHER ↔ IC 1579 navigation state.
+   * AETHER = the cosmic overview between destinations.
+   * IC 1579 = the destination galaxy, with explicit depth states
+   * (approach → object view → stellar interior → systems → worlds → surface).
+   */
+  public computeNavigationMode(): NavigationMode {
+    if (this.isOnSurface) return 'IC1579_SURFACE';
+    if (this.activeMoonId || this.activePlanetId) return 'IC1579_PLANET';
+    if (this.activeSystemId) return 'IC1579_SYSTEM';
+
+    if (this.activeGalaxyId === this.ic1579GalaxyId) {
+      if (this.ic1579ApproachActive || this.camTransitionQueue.length > 0) {
+        return 'IC1579_APPROACH';
+      }
+      const active = this.getActiveGalaxy();
+      if (active && this.camera.position.distanceTo(active.worldPosition) > active.boundingRadius) {
+        return 'IC1579_GALAXY';
+      }
+      return 'IC1579_STELLAR';
+    }
+    return 'AETHER';
+  }
+
+  public getNavigationMode(): NavigationMode {
+    return this.navigationMode;
   }
 
   public getSurfaceState() {
@@ -413,15 +508,55 @@ export class GalaxyEngine {
     this.setState('CORE_TRANSITION');
 
     this.interactionPlane.constant = -targetGalaxy.worldPosition.y;
+    this.ic1579ApproachActive = false;
+    this.camTransitionQueue = [];
 
-    const targetCamPos = new THREE.Vector3().copy(targetGalaxy.worldPosition).add(this.defaultCamOffset);
-    const targetLookPos = new THREE.Vector3().copy(targetGalaxy.worldPosition).add(this.defaultLookOffset);
+    if (galaxyId === this.ic1579GalaxyId) {
+      // IC 1579: staged cinematic approach across the empty gap —
+      // distant object view → galactic boundary crossing → stellar interior.
+      this.beginIC1579Approach(targetGalaxy);
+    } else {
+      const targetCamPos = new THREE.Vector3().copy(targetGalaxy.worldPosition).add(this.defaultCamOffset);
+      const targetLookPos = new THREE.Vector3().copy(targetGalaxy.worldPosition).add(this.defaultLookOffset);
 
-    const flightDist = this.camera.position.distanceTo(targetCamPos);
-    const flightDuration = Math.min(Math.max(flightDist * 0.005, 1.2), 2.4);
+      const flightDist = this.camera.position.distanceTo(targetCamPos);
+      const flightDuration = Math.min(Math.max(flightDist * 0.005, 1.2), 2.4);
 
-    this.startCameraTransition(targetCamPos, targetLookPos, flightDuration);
+      this.startCameraTransition(targetCamPos, targetLookPos, flightDuration);
+    }
+
     this.emitUniverseState();
+  }
+
+  /**
+   * The IC 1579 entry sequence. The user first sees IC 1579 as a distant
+   * structure; the galaxy slowly grows; structure, dust and nebulae resolve;
+   * the camera crosses the galactic boundary and settles inside the stellar
+   * environment. No hard scene change — one continuous flight.
+   */
+  private beginIC1579Approach(targetGalaxy: GalaxyInstance) {
+    const center = targetGalaxy.worldPosition;
+    const approachDir = new THREE.Vector3(0.35, 0.3, 1).normalize();
+
+    // Stage 1 — AETHER → distant galaxy object view.
+    const stage1Pos = center.clone().addScaledVector(approachDir, 175);
+    const stage1Look = center.clone();
+    const flightDist = this.camera.position.distanceTo(stage1Pos);
+    const flightDuration = Math.min(Math.max(flightDist * 0.006, 1.6), 3.0);
+
+    // Stage 2 — approach: the galaxy grows, spiral structure resolves,
+    // dust lanes and nebulae become visible near the galactic boundary.
+    const stage2Pos = center.clone().addScaledVector(approachDir, 72);
+    const stage2Look = center.clone();
+
+    // Stage 3 — enter: settle inside the dense stellar environment.
+    const stage3Pos = center.clone().add(this.defaultCamOffset);
+    const stage3Look = center.clone().add(this.defaultLookOffset);
+
+    this.ic1579ApproachActive = true;
+    this.startCameraTransition(stage1Pos, stage1Look, flightDuration);
+    this.queueCameraTransition(stage2Pos, stage2Look, 3.2);
+    this.queueCameraTransition(stage3Pos, stage3Look, 2.6);
   }
 
   /**
@@ -685,6 +820,7 @@ export class GalaxyEngine {
     this.nebula.setPixelRatio(config.dpr);
     this.starfield.setPixelRatio(config.dpr);
     this.foregroundDust.setPixelRatio(config.dpr);
+    this.cosmicWeb.setPixelRatio(config.dpr);
     this.surfaceExperience?.setPixelRatio(config.dpr);
   }
 
@@ -899,6 +1035,8 @@ export class GalaxyEngine {
   }
 
   private startCameraTransition(targetPos: THREE.Vector3, targetLook: THREE.Vector3, duration = 1.0) {
+    // A direct transition supersedes any chained (approach) flight.
+    this.camTransitionQueue = [];
     this.isTransitioningCamera = true;
     this.camTransitionStartPos.copy(this.camera.position);
     this.camTransitionTargetPos.copy(targetPos);
@@ -906,6 +1044,29 @@ export class GalaxyEngine {
     this.camTransitionTargetLook.copy(targetLook);
     this.camTransitionProgress = 0.0;
     this.camTransitionDuration = duration;
+  }
+
+  private queueCameraTransition(targetPos: THREE.Vector3, targetLook: THREE.Vector3, duration: number) {
+    this.camTransitionQueue.push({
+      targetPos: targetPos.clone(),
+      targetLook: targetLook.clone(),
+      duration,
+    });
+  }
+
+  private beginNextQueuedTransition() {
+    const next = this.camTransitionQueue.shift();
+    if (!next) {
+      this.ic1579ApproachActive = false;
+      return;
+    }
+    this.isTransitioningCamera = true;
+    this.camTransitionStartPos.copy(this.camera.position);
+    this.camTransitionTargetPos.copy(next.targetPos);
+    this.camTransitionStartLook.copy(this.controls.target);
+    this.camTransitionTargetLook.copy(next.targetLook);
+    this.camTransitionProgress = 0.0;
+    this.camTransitionDuration = next.duration;
   }
 
   public resetCamera() {
@@ -921,6 +1082,31 @@ export class GalaxyEngine {
     this.activeMoonId = null;
     this.updateControlsScale();
     this.setState('RETURNING');
+
+    if (active.config.id === this.ic1579GalaxyId) {
+      // Reverse of the entry sequence: leave the galaxy, then return to
+      // the AETHER vantage. The user watches IC 1579 recede into a distant
+      // structure and the empty cosmic space reopen around them.
+      const center = active.worldPosition;
+      const approachDir = new THREE.Vector3(0.35, 0.3, 1).normalize();
+      const dist = this.camera.position.distanceTo(center);
+
+      this.ic1579ApproachActive = true;
+
+      if (dist > 175) {
+        // Already outside the galaxy — fly straight back to AETHER.
+        this.startCameraTransition(this.aetherVantagePos, this.aetherVantageLook, 2.4);
+      } else {
+        const leavePos = center.clone().addScaledVector(approachDir, 175);
+        const leaveLook = center.clone();
+        const flightDist = this.camera.position.distanceTo(leavePos);
+        const flightDuration = Math.min(Math.max(flightDist * 0.005, 1.2), 2.4);
+        this.startCameraTransition(leavePos, leaveLook, flightDuration);
+        this.queueCameraTransition(this.aetherVantagePos, this.aetherVantageLook, 3.0);
+      }
+      return;
+    }
+
     const targetPos = new THREE.Vector3().copy(active.worldPosition).add(this.defaultCamOffset);
     const targetLook = new THREE.Vector3().copy(active.worldPosition).add(this.defaultLookOffset);
     this.startCameraTransition(targetPos, targetLook, 0.9);
@@ -989,6 +1175,7 @@ export class GalaxyEngine {
     this.nebula.setPixelRatio(config.dpr);
     this.starfield.setPixelRatio(config.dpr);
     this.foregroundDust.setPixelRatio(config.dpr);
+    this.cosmicWeb.setPixelRatio(config.dpr);
 
     this.nebula.rebuild(config.nebulaCount);
     this.starfield.rebuild(config.starCount);
@@ -1014,6 +1201,7 @@ export class GalaxyEngine {
     total += this.starfield.points.geometry.attributes.position ? this.starfield.points.geometry.attributes.position.count : 0;
     total += this.nebula.points.geometry.attributes.position ? this.nebula.points.geometry.attributes.position.count : 0;
     total += this.foregroundDust.points.geometry.attributes.position ? this.foregroundDust.points.geometry.attributes.position.count : 0;
+    total += this.cosmicWeb.points.geometry.attributes.position ? this.cosmicWeb.points.geometry.attributes.position.count : 0;
     return total;
   }
 
@@ -1083,9 +1271,25 @@ export class GalaxyEngine {
       this.controls.target.lerpVectors(this.camTransitionStartLook, this.camTransitionTargetLook, ease);
 
       if (t >= 1.0) {
-        this.isTransitioningCamera = false;
-        this.setState(this.isInspectingCore ? 'CORE_INSPECTION' : 'EXPLORING');
-        this.emitUniverseState();
+        if (this.camTransitionQueue.length > 0) {
+          this.beginNextQueuedTransition();
+        } else {
+          this.isTransitioningCamera = false;
+          this.ic1579ApproachActive = false;
+
+          // Returned from IC 1579 to the AETHER vantage — the cosmic
+          // overview re-anchors on Aether Prime.
+          if (
+            this.activeGalaxyId === this.ic1579GalaxyId &&
+            this.camera.position.distanceTo(this.aetherVantagePos) < 30
+          ) {
+            this.activeGalaxyId = 'galaxy01';
+            this.updateControlsScale();
+          }
+
+          this.setState(this.isInspectingCore ? 'CORE_INSPECTION' : 'EXPLORING');
+          this.emitUniverseState();
+        }
       }
     } else if (this.isOnSurface && this.activePlanetId && this.activeSystemId) {
       // Surface mode: keep the camera glued to the planet's position
@@ -1159,6 +1363,64 @@ export class GalaxyEngine {
     // 7. Update OrbitControls
     this.controls.update();
 
+    // 7b. AETHER ↔ IC 1579 separation dynamics
+    const ic1579Galaxy = this.galaxies.get(this.ic1579GalaxyId);
+    const distToIC1579 = ic1579Galaxy
+      ? this.camera.position.distanceTo(ic1579Galaxy.worldPosition)
+      : Infinity;
+    const targetPresence = 1.0 - THREE.MathUtils.smoothstep(260.0, 80.0, distToIC1579);
+    this.ic1579Presence += (targetPresence - this.ic1579Presence) * 0.04;
+
+    // Gradual color transition: deep blue-black (AETHER) → dark teal-black
+    // (inside IC 1579). Not a filter — a subtle environmental shift.
+    if (this.scene.background instanceof THREE.Color) {
+      this.scene.background
+        .copy(this.aetherBackground)
+        .lerp(this.ic1579Background, this.ic1579Presence);
+    }
+
+    // Proximity-driven density: from AETHER, IC 1579 reads as a faint
+    // distant structure; crossing its boundary swells it to full density.
+    if (ic1579Galaxy) {
+      ic1579Galaxy.particles.setIntensity(0.3 + 0.7 * this.ic1579Presence);
+    }
+
+    // Environment dimming per navigation mode — the galaxy owns the scene
+    // once the camera is inside, while AETHER stays dark and quiet.
+    const navMode = this.computeNavigationMode();
+    this.navigationMode = navMode;
+    let envTarget: { nebula: number; starfield: number; dust: number; web: number };
+    switch (navMode) {
+      case 'IC1579_APPROACH':
+        envTarget = { nebula: 0.35, starfield: 0.55, dust: 0.3, web: 0.45 };
+        break;
+      case 'IC1579_GALAXY':
+        envTarget = { nebula: 0.3, starfield: 0.5, dust: 0.25, web: 0.4 };
+        break;
+      case 'IC1579_STELLAR':
+        envTarget = { nebula: 0.22, starfield: 0.4, dust: 0.2, web: 0.3 };
+        break;
+      case 'IC1579_SYSTEM':
+        envTarget = { nebula: 0.16, starfield: 0.3, dust: 0.14, web: 0.22 };
+        break;
+      case 'IC1579_PLANET':
+      case 'IC1579_SURFACE':
+        envTarget = { nebula: 0.12, starfield: 0.2, dust: 0.1, web: 0.15 };
+        break;
+      case 'AETHER':
+      default:
+        envTarget = { nebula: 0.5, starfield: 0.65, dust: 0.4, web: 0.5 };
+        break;
+    }
+    this.envIntensity.nebula += (envTarget.nebula - this.envIntensity.nebula) * 0.05;
+    this.envIntensity.starfield += (envTarget.starfield - this.envIntensity.starfield) * 0.05;
+    this.envIntensity.dust += (envTarget.dust - this.envIntensity.dust) * 0.05;
+    this.envIntensity.web += (envTarget.web - this.envIntensity.web) * 0.05;
+    this.nebula.setIntensity(this.envIntensity.nebula);
+    this.starfield.setIntensity(this.envIntensity.starfield);
+    this.foregroundDust.setIntensity(this.envIntensity.dust);
+    this.cosmicWeb.setIntensity(this.envIntensity.web);
+
     // 8. Update Scale-Aware LOD and Simulation for all Galaxies
     const effectiveTime = this.prefersReducedMotion ? elapsedTime * 0.2 : elapsedTime;
 
@@ -1223,6 +1485,7 @@ export class GalaxyEngine {
     this.nebula.update(effectiveTime, this.entranceProgress);
     this.starfield.update(effectiveTime, this.entranceProgress);
     this.foregroundDust.update(effectiveTime, this.entranceProgress);
+    this.cosmicWeb.update(effectiveTime, 1.0);
 
     // 11. Update Relativistic Gravitational Lensing in Post-Processing
     if (activeGalaxy && activeGalaxy.config.hasBlackHole && activeGalaxy.config.blackHoleConfig) {
@@ -1301,6 +1564,7 @@ export class GalaxyEngine {
     this.nebula.dispose();
     this.starfield.dispose();
     this.foregroundDust.dispose();
+    this.cosmicWeb.dispose();
     this.postProcessing.dispose();
     this.renderer.dispose();
 

@@ -42,6 +42,10 @@ export class NebulaParticles {
     this.material.uniforms.uEntranceProgress.value = entranceProgress;
   }
 
+  public setIntensity(intensity: number) {
+    this.material.uniforms.uIntensity.value = intensity;
+  }
+
   public setPixelRatio(dpr: number) {
     this.material.uniforms.uPixelRatio.value = dpr;
   }

@@ -3,6 +3,8 @@ varying vec3 vColor;
 varying float vAlpha;
 varying float vDensity;
 
+uniform float uIntensity;
+
 void main() {
   vec2 coord = gl_PointCoord - vec2(0.5);
   float r = length(coord);
@@ -22,7 +24,7 @@ void main() {
     finalColor += vec3(0.15, 0.20, 0.30) * core;
   }
 
-  float alpha = shape * vAlpha * 0.75;
+  float alpha = shape * vAlpha * 0.75 * uIntensity;
   gl_FragColor = vec4(finalColor, clamp(alpha, 0.0, 1.0));
 }
 `;

@@ -2,6 +2,8 @@ export const starfieldFragmentShader = /* glsl */ `
 varying vec3 vColor;
 varying float vAlpha;
 
+uniform float uIntensity;
+
 void main() {
   vec2 coord = gl_PointCoord - vec2(0.5);
   float r = length(coord);
@@ -12,6 +14,6 @@ void main() {
 
   // Crisp stellar point with soft micro-glow
   float glow = exp(-18.0 * r * r);
-  gl_FragColor = vec4(vColor, glow * vAlpha);
+  gl_FragColor = vec4(vColor, glow * vAlpha * uIntensity);
 }
 `;

@@ -996,16 +996,22 @@ export const GALAXY_16_CONFIG: GalaxyConfig = {
 // ============================================================================
 // GROUP E: IC 1579 — THE SPECIAL DEEP EXPLORATION GALAXY
 // ============================================================================
+// ============================================================================
+// GROUP E: IC 1579 — THE SPECIAL DEEP EXPLORATION GALAXY
+// Isolated deep-space destination, far from the Local Cluster. From AETHER
+// the user sees it as a distant emerald structure; approaching it crosses
+// a vast empty gap before the galaxy resolves and swallows the camera.
+// ============================================================================
 export const IC1579_CONFIG: GalaxyConfig = {
   id: 'galaxy17',
   name: 'IC 1579',
   subtitle: 'Emerald Deep-Spiral • Living Ecosystem',
   description: 'An ancient emerald spiral galaxy harboring a supermassive black hole, a Dyson swarm megastructure, a tesseract-projection world, and a flagship ringed oceanic planet. The only galaxy in the cosmos where deep exploration reaches from galactic core to planetary surface and back to the night sky.',
   type: 'ic1579-emerald-spiral',
-  groupId: 'groupA',
-  position: [-25, 8, -12],
+  groupId: 'groupE',
+  position: [-285, 38, -165],
   rotation: [0.12, -0.08, 0.05],
-  scale: 1.15,
+  scale: 1.45,
   speed: 0.22,
   turbulence: 0.75,
   boundingRadius: 52.0,
@@ -1043,7 +1049,7 @@ export const IC1579_CONFIG: GalaxyConfig = {
     dustSecondary: '#052E16',
     starFormation: '#84CC16',
     starFormationWarm: '#BEF264',
-    ambientStars: ['#D8FFE8', '#8FFFC1', '#5EEAD4', '#14B8A6', '#0FA66B'],
+    ambientStars: ['#D8FFE8', '#8FFFC1', '#5EEAD4', '#14B8A6', '#0FA66B', '#2DD4BF'],
   },
   morphology: {
     type: 'ic1579-emerald-spiral',
@@ -1052,11 +1058,11 @@ export const IC1579_CONFIG: GalaxyConfig = {
     barStrength: 0.25,
     ringStrength: 0.2,
     diskFlattening: 0.5,
-    coreDensity: 1.2,
-    dustDensity: 1.4,
+    coreDensity: 1.35,
+    dustDensity: 1.5,
     verticalThickness: 1.5,
-    starFormationDensity: 1.3,
-    spiralTightness: 3.5,
+    starFormationDensity: 1.4,
+    spiralTightness: 3.6,
     darkLaneStrength: 0.8,
     voidStrength: 0.4,
   },
@@ -1068,8 +1074,8 @@ export const COSMIC_GROUPS: GalaxyGroupInfo[] = [
     name: 'Local Cluster',
     designation: 'GROUP ALPHA // PRIME SECTOR',
     center: [-70, -15, -15],
-    description: 'The ancient primordial galaxy group harboring the baseline spiral Aether Prime, the deep emerald ecosystem of Verdant, and the living IC 1579 ecosystem.',
-    galaxyIds: ['galaxy01', 'galaxy03', 'galaxy07', 'galaxy10', 'galaxy17'],
+    description: 'The ancient primordial galaxy group harboring the baseline spiral Aether Prime, the deep emerald ecosystem of Verdant, and the violet storms of Aethelgard.',
+    galaxyIds: ['galaxy01', 'galaxy03', 'galaxy07', 'galaxy10'],
   },
   {
     id: 'groupB',
@@ -1094,6 +1100,14 @@ export const COSMIC_GROUPS: GalaxyGroupInfo[] = [
     center: [240, 35, -155],
     description: 'The monumental core cluster of the cosmic web, dominated by the supermassive centerpiece Aetheris with its dual relativistic energy jets.',
     galaxyIds: ['galaxy06', 'galaxy11', 'galaxy14', 'galaxy16'],
+  },
+  {
+    id: 'groupE',
+    name: 'IC 1579',
+    designation: 'THE DEEP DESTINATION // STANDALONE GALAXY',
+    center: [-285, 38, -165],
+    description: 'A single emerald spiral isolated from every galaxy group — the only galaxy in the cosmos built for deep exploration. From AETHER it appears as a distant jewel across a vast, intentionally empty gap of deep space.',
+    galaxyIds: ['galaxy17'],
   },
 ];
 

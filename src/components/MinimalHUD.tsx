@@ -37,6 +37,16 @@ const DISCOVERY_TAG_LABEL: Record<string, { label: string; color: string }> = {
   'core-vicinity': { label: 'BLACK HOLE VICINITY', color: 'text-emerald-200' },
 };
 
+const NAVIGATION_MODE_LABEL: Record<string, string> = {
+  AETHER: 'AETHER // THE SPACE BETWEEN GALAXIES',
+  IC1579_APPROACH: 'IC 1579 // APPROACH',
+  IC1579_GALAXY: 'IC 1579 // DEEP SPIRAL',
+  IC1579_STELLAR: 'IC 1579 // STELLAR INTERIOR',
+  IC1579_SYSTEM: 'IC 1579 // STAR SYSTEM',
+  IC1579_PLANET: 'IC 1579 // WORLD ORBIT',
+  IC1579_SURFACE: 'IC 1579 // SURFACE',
+};
+
 function timeOfDayLabel(t: number): string {
   const tiers: Array<[number, string]> = [
     [0.8125, 'NIGHT'],
@@ -153,7 +163,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
   universeState = {
     activeGalaxyId: 'galaxy01',
     isNavigating: false,
-    distanceToActive: 44,
+    distanceToActive: 158,
   },
   onSelectPreset,
   onSelectQuality,
@@ -365,6 +375,21 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
             <span className="chip-val">{stats.cameraDistance} AU</span>
           </div>
 
+          {universeState.navigationMode && (
+            <div
+              className={`telemetry-chip nav-mode-chip ${universeState.navigationMode === 'AETHER' ? 'nav-aether' : 'nav-ic1579'}`}
+            >
+              <Compass
+                className={`chip-icon ${universeState.navigationMode === 'AETHER' ? 'text-violet-400' : 'text-emerald-300'}`}
+              />
+              <span
+                className={`chip-label ${universeState.navigationMode === 'AETHER' ? 'text-violet-300' : 'text-emerald-300'}`}
+              >
+                {NAVIGATION_MODE_LABEL[universeState.navigationMode]}
+              </span>
+            </div>
+          )}
+
           {activeMoon && (
             <div className="telemetry-chip active-moon-chip">
               <Moon className="chip-icon text-amber-300 animate-pulse" />
@@ -532,6 +557,21 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
               >
                 CONTINUE FLYING
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IC 1579 Transition Banner — visible while crossing the galactic boundary */}
+      {universeState.navigationMode === 'IC1579_APPROACH' && (
+        <div className="star-system-prompt-banner pointer-events-auto animate-fade-in">
+          <div className="prompt-content">
+            <Compass className="w-5 h-5 text-emerald-300 animate-pulse mr-2.5" />
+            <div className="prompt-text">
+              <span className="prompt-title text-emerald-300">IC 1579 // GALACTIC TRANSITION</span>
+              <span className="prompt-sub">
+                STELLAR DENSITY, DUST LANES & NEBULAE RESOLVE AS YOU CROSS ITS BOUNDARY
+              </span>
             </div>
           </div>
         </div>
@@ -796,6 +836,8 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
               ? `INSPECTING ${activePlanet.name.toUpperCase()} • CLICK MOONS TO DIVE IN${activePlanet.surfaceExplore ? ' • DESCEND TO SURFACE FOR THE NIGHT SKY' : ''} • ESC / BACK — EXIT WORLD`
               : activeSystem
               ? `STAR SYSTEM // ${activeSystem.name.toUpperCase()} • CLICK PLANETS TO DIVE IN • ESC / BACK — EXIT TO GALAXY`
+              : isIC1579
+              ? `IC 1579 // EMERALD DEEP SPIRAL • DIVE INTO DISCOVERABLE SYSTEMS (10) • C / DOUBLE-CLICK — INSPECT CORE • R — LEAVE GALAXY / RETURN TO AETHER`
               : universeState.detectedBlackHole
               ? `SUPERMASSIVE BLACK HOLE FIELD • GRAVITATIONAL LENSING & WARPED ACCRETION ARCS • C / DOUBLE-CLICK — INSPECT CORE`
               : 'ZOOM INTO PRIME GALAXY FOR STAR SYSTEMS OR TRAVEL TO GALAXIES [02–16] FOR SUPERMASSIVE BLACK HOLES'}

@@ -35,7 +35,7 @@ export interface BlackHoleConfig {
   palette: BlackHolePalette;
 }
 
-export type GalaxyGroupId = 'groupA' | 'groupB' | 'groupC' | 'groupD';
+export type GalaxyGroupId = 'groupA' | 'groupB' | 'groupC' | 'groupD' | 'groupE';
 
 export interface GalaxyGroupInfo {
   id: GalaxyGroupId;
@@ -107,6 +107,20 @@ export type ScaleLevel =
   | 'SURFACE'
   | 'NIGHT_SKY';
 
+/**
+ * Explicit navigation state separating the AETHER cosmic overview
+ * from IC 1579 (the destination galaxy) and every depth inside it.
+ * AETHER = the space between destinations. IC 1579 = the destination.
+ */
+export type NavigationMode =
+  | 'AETHER' // Deep-space overview between galaxies
+  | 'IC1579_APPROACH' // Cinematic flight toward the distant galaxy
+  | 'IC1579_GALAXY' // Outside IC 1579, seeing it as an object
+  | 'IC1579_STELLAR' // Inside the galaxy, between its stars
+  | 'IC1579_SYSTEM' // Inside a star system within IC 1579
+  | 'IC1579_PLANET' // Orbiting a planet/moon within IC 1579
+  | 'IC1579_SURFACE'; // Landed on a surface, night sky = IC 1579
+
 export interface SurfaceState {
   isLanded: boolean;
   timeOfDay: number; // 0.0 to 1.0 (0=Midnight, 0.25=Sunrise, 0.5=Noon, 0.75=Sunset)
@@ -128,6 +142,7 @@ export interface UniverseState {
   detectedSystemName?: string | null;
   timeScale?: number;
   scaleLevel?: ScaleLevel;
+  navigationMode?: NavigationMode;
   surfaceState?: SurfaceState;
   discoveredFeatures?: string[];
   activeDiscoveryTag?: string | null;

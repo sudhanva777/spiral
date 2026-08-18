@@ -65,6 +65,10 @@ export class GalaxyParticles {
     this.points.frustumCulled = false;
   }
 
+  public setIntensity(intensity: number) {
+    this.material.uniforms.uIntensity.value = intensity;
+  }
+
   public update(
     time: number,
     mousePos3D: THREE.Vector3,
