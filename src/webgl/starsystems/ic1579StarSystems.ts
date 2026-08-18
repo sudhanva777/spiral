@@ -1619,9 +1619,12 @@ export const IC1579_STAR_SYSTEMS: StarSystemConfig[] = [
       ],
       surfaceExplore: true,
       surfaceGravity: 1.62,
-      surfaceJumpHeight: 0.16,
+      surfaceJumpHeight: 1.2,
       surfaceDayLength: 1200,
       surfaceVegetationCount: 2800,
+      surfaceCameraHeight: 0.0019,
+      surfaceWalkSpeed: 1.4,
+      surfaceCivilization: true,
     },
     {
       id: 'greenstar-p6',

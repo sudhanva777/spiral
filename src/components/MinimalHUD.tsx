@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Volume2,
   VolumeX,
@@ -29,6 +29,8 @@ import { getCosmicObjectById } from '../webgl/cosmic/cosmicObjectRegistry';
 import { PRIME_GALAXY_STAR_SYSTEMS, getStarSystemById, getStarSystemsForGalaxy } from '../webgl/starsystems/starSystemRegistry';
 import { GREEN_STAR_SYSTEM_ID, GEMINI_PLANET_ID } from '../webgl/starsystems/ic1579StarSystems';
 import { soundSynthesizer } from './SoundSynthesizer';
+import { isTouchDevice } from '../webgl/utils/deviceDetection';
+import { TouchSurfaceControls } from './TouchSurfaceControls';
 
 const COSMIC_OBJECT_TYPE_LABEL: Record<string, string> = {
   NEBULA: 'STAR-FORMING NEBULA',
@@ -168,6 +170,10 @@ interface MinimalHUDProps {
   onExitSurface?: () => void;
   onEnterCosmicObject?: (objectId: string) => void;
   onExitCosmicObject?: () => void;
+  // Mobile touch-surface normalized actions (joystick + contextual buttons)
+  onSurfaceStickInput?: (x: number, y: number) => void;
+  onSurfaceJump?: () => void;
+  onSurfaceInteract?: () => void;
 }
 
 export const MinimalHUD: React.FC<MinimalHUDProps> = ({
@@ -194,6 +200,9 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
   onExitSurface,
   onEnterCosmicObject,
   onExitCosmicObject,
+  onSurfaceStickInput,
+  onSurfaceJump,
+  onSurfaceInteract,
 }) => {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -201,6 +210,8 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
   const [showInfo, setShowInfo] = useState(false);
   const [dismissedPromptSystemId, setDismissedPromptSystemId] = useState<string | null>(null);
   const [dismissedPromptCosmicId, setDismissedPromptCosmicId] = useState<string | null>(null);
+
+  const isTouch = useMemo(() => isTouchDevice(), []);
 
   const isCoreInspecting = interactionState === 'CORE_INSPECTION' || interactionState === 'CORE_TRANSITION';
   const activeGalaxy = getGalaxyConfigById(universeState.activeGalaxyId);
@@ -229,6 +240,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
 
   const isOnSurface = !!universeState.surfaceState;
   const surfaceTime = universeState.surfaceState?.timeOfDay ?? 0;
+  const surfaceInteraction = universeState.surfaceInteraction;
   const activeDiscoveryTag = universeState.activeDiscoveryTag;
   const discoveryInfo = activeDiscoveryTag ? DISCOVERY_TAG_LABEL[activeDiscoveryTag] : undefined;
 
@@ -414,7 +426,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
 
         {/* Telemetry Chips */}
         <div className="hud-telemetry pointer-events-auto">
-          <div className="telemetry-chip">
+          <div className="telemetry-chip fps-chip">
             <Activity className="chip-icon text-purple-400" />
             <span className="chip-label">FPS</span>
             <span className="chip-val">{stats.fps}</span>
@@ -590,7 +602,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
 
           <button
             onClick={handleToggleFullscreen}
-            className="hud-btn hidden-mobile"
+            className="hud-btn"
             title="Toggle Fullscreen"
             aria-label="Fullscreen"
           >
@@ -667,6 +679,11 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
                 <>
                   <span className="prompt-title text-emerald-300">GEMINI</span>
                   <span className="prompt-sub">HABITABLE WORLD • RINGED PLANET</span>
+                  {detectedPlanet.surfaceCivilization && (
+                    <span className="prompt-sub text-emerald-200/80">
+                      CIVILIZATION DETECTED — EMERIA CAPITAL • LIVING WORLD BELOW
+                    </span>
+                  )}
                 </>
               ) : (
                 <>
@@ -752,6 +769,54 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           </div>
         </div>
       )}
+
+      {/* GEMINI living world — interaction prompt (TALK / INSPECT) */}
+      {isOnSurface && surfaceInteraction && !surfaceInteraction.active && (
+        <div className="interaction-prompt pointer-events-auto animate-fade-in">
+          <span className="interaction-prompt-name">{surfaceInteraction.name.toUpperCase()}</span>
+          <span className="interaction-prompt-divider" />
+          <span className="interaction-prompt-action">E — {surfaceInteraction.prompt}</span>
+        </div>
+      )}
+
+      {/* GEMINI living world — dialogue panel */}
+      {isOnSurface && surfaceInteraction && surfaceInteraction.active && (
+        <div className="dialogue-panel pointer-events-auto animate-fade-in">
+          <div className="dialogue-header">
+            <span className="dialogue-speaker">{surfaceInteraction.name.toUpperCase()}</span>
+            <span className="dialogue-title">{surfaceInteraction.title.toUpperCase()}</span>
+            <span className="dialogue-progress">
+              {surfaceInteraction.lineIndex + 1} / {surfaceInteraction.dialogue.length}
+            </span>
+          </div>
+          <div className="dialogue-body">
+            {surfaceInteraction.dialogue[surfaceInteraction.lineIndex]}
+          </div>
+          <div className="dialogue-footer">
+            <span className="dialogue-hint">
+              E — {surfaceInteraction.lineIndex >= surfaceInteraction.dialogue.length - 1 ? 'CLOSE' : 'NEXT'} • ESC — CLOSE
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* GEMINI mobile touch controls — joystick + contextual actions */}
+      {isOnSurface &&
+        isTouch &&
+        onSurfaceStickInput &&
+        onSurfaceInteract &&
+        onExitSurface && (
+          <TouchSurfaceControls
+            engine={{
+              setSurfaceStickInput: onSurfaceStickInput,
+              triggerSurfaceJump: () => onSurfaceJump && onSurfaceJump(),
+              triggerSurfaceInteract: onSurfaceInteract,
+            }}
+            interaction={surfaceInteraction ?? null}
+            canJump={!!activePlanet?.surfaceGravity}
+            onExitSurface={onExitSurface}
+          />
+        )}
 
       {/* Hierarchy Level Explorer Drawer */}
       {activePlanet && activePlanet.moons && activePlanet.moons.length > 0 ? (
@@ -991,7 +1056,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           <div className="pulse-dot" />
           <span>
             {isOnSurface
-              ? `${activePlanet?.name.toUpperCase() || 'PLANET'} SURFACE // NIGHT SKY = IC 1579 FROM THIS WORLD • WASD / ARROWS — WALK${activePlanet?.surfaceGravity ? ' • SPACE — LOW-GRAVITY JUMP' : ''} • DRAG — LOOK AROUND • SCROLL — CLIMB • ESC — EXIT PLANET`
+              ? `${activePlanet?.name.toUpperCase() || 'PLANET'} SURFACE // NIGHT SKY = IC 1579 FROM THIS WORLD • WASD / ARROWS — WALK${activePlanet?.surfaceGravity ? ' • SPACE — LOW-GRAVITY JUMP' : ''}${activePlanet?.surfaceCivilization ? ' • E — INTERACT / TALK' : ''} • DRAG — LOOK AROUND • SCROLL — CLIMB • ESC — EXIT PLANET`
               : activeCosmicObject
               ? `INSPECTING ${activeCosmicObject.name.toUpperCase()} // ${COSMIC_OBJECT_TYPE_LABEL[activeCosmicObject.type] || 'DEEP-SPACE STRUCTURE'} • DRAG — ORBIT • SCROLL — ZOOM • ESC — RETURN TO AETHER`
               : activeMoon

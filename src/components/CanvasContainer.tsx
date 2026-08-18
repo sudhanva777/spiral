@@ -3,6 +3,7 @@ import { GalaxyEngine } from '../webgl/GalaxyEngine';
 import { MinimalHUD, GALAXY_PRESETS } from './MinimalHUD';
 import { WebGLFallback } from './WebGLFallback';
 import { isWebGLAvailable, detectQualityTier } from '../webgl/utils/deviceDetection';
+import { soundSynthesizer } from './SoundSynthesizer';
 import type { GalaxyPreset, InteractionState, QualityTier, SimulationStats } from '../types/simulation';
 import type { UniverseState } from '../types/universe';
 
@@ -38,6 +39,19 @@ export const CanvasContainer: React.FC = () => {
 
   const handleUniverseStateChange = useCallback((newUniverseState: UniverseState) => {
     setUniverseState(newUniverseState);
+  }, []);
+
+  // Mobile audio policy: the AudioContext may only start inside a user
+  // gesture. The first interaction anywhere unlocks it so the ambient drone
+  // (and city ambience) can play without a second tap.
+  useEffect(() => {
+    const unlock = () => soundSynthesizer.unlock();
+    window.addEventListener('pointerdown', unlock, { passive: true });
+    window.addEventListener('keydown', unlock);
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
   }, []);
 
   useEffect(() => {
@@ -155,6 +169,24 @@ export const CanvasContainer: React.FC = () => {
     }
   };
 
+  const handleSurfaceStickInput = (x: number, y: number) => {
+    if (engineRef.current) {
+      engineRef.current.setSurfaceStickInput(x, y);
+    }
+  };
+
+  const handleSurfaceJump = () => {
+    if (engineRef.current) {
+      engineRef.current.triggerSurfaceJump();
+    }
+  };
+
+  const handleSurfaceInteract = () => {
+    if (engineRef.current) {
+      engineRef.current.triggerSurfaceInteract();
+    }
+  };
+
   if (!hasWebGL) {
     return <WebGLFallback />;
   }
@@ -185,6 +217,9 @@ export const CanvasContainer: React.FC = () => {
         onExitSurface={handleExitSurface}
         onEnterCosmicObject={handleEnterCosmicObject}
         onExitCosmicObject={handleExitCosmicObject}
+        onSurfaceStickInput={handleSurfaceStickInput}
+        onSurfaceJump={handleSurfaceJump}
+        onSurfaceInteract={handleSurfaceInteract}
       />
     </div>
   );

@@ -12,6 +12,28 @@ export function isWebGLAvailable(): boolean {
   }
 }
 
+/** True when the primary input is a coarse touch pointer (phones/tablets). */
+export function isTouchDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia('(hover: none) and (pointer: coarse)').matches ||
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  );
+}
+
+/** True when the device is small-screen (mobile-first composition). */
+export function isSmallScreen(): boolean {
+  return typeof window !== 'undefined' && window.innerWidth <= 820;
+}
+
+/** Effective device-pixel-ratio: hardware DPR capped per quality tier, then
+ *  multiplied by a dynamic resolution scale (0.65–1.0) for adaptive quality. */
+export function effectivePixelRatio(tier: QualityTier, resolutionScale = 1.0): number {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.0);
+  const cap = getQualityConfigForTier(tier).dpr;
+  return Math.min(dpr, cap) * Math.max(0.65, Math.min(1.0, resolutionScale));
+}
+
 export function detectQualityTier(): QualityConfig {
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
     navigator.userAgent

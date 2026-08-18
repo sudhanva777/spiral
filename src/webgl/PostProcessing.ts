@@ -99,6 +99,8 @@ export class PostProcessingPipeline {
   public renderPass: RenderPass;
   public compositePass: ShaderPass;
   private enabled = true;
+  private width: number;
+  private height: number;
 
   constructor(
     renderer: THREE.WebGLRenderer,
@@ -108,14 +110,15 @@ export class PostProcessingPipeline {
     height: number,
     bloomStrength = 0.55,
     bloomRadius = 0.40,
-    bloomThreshold = 0.70
+    bloomThreshold = 0.70,
+    samples = 4
   ) {
     const renderTarget = new THREE.WebGLRenderTarget(width, height, {
       type: THREE.HalfFloatType,
       format: THREE.RGBAFormat,
       minFilter: THREE.LinearFilter,
       magFilter: THREE.LinearFilter,
-      samples: 4,
+      samples,
     });
 
     this.composer = new EffectComposer(renderer, renderTarget);
@@ -134,12 +137,25 @@ export class PostProcessingPipeline {
     this.compositePass = new ShaderPass(CosmicCompositeShader);
     this.compositePass.uniforms.uAspectRatio.value = width / height;
     this.composer.addPass(this.compositePass);
+
+    this.width = width;
+    this.height = height;
   }
 
   public setSize(width: number, height: number) {
+    this.width = width;
+    this.height = height;
     this.composer.setSize(width, height);
     this.bloomPass.resolution.set(width, height);
     this.compositePass.uniforms.uAspectRatio.value = width / height;
+  }
+
+  /** Keep the composer's internal buffer in sync with a new renderer pixel
+   *  ratio (used by adaptive/dynamic resolution scaling). */
+  public setPixelRatio(pixelRatio: number) {
+    this.composer.setPixelRatio(pixelRatio);
+    this.composer.setSize(this.width, this.height);
+    this.bloomPass.resolution.set(this.width * pixelRatio, this.height * pixelRatio);
   }
 
   public setBloomParams(strength: number, radius: number, threshold = 0.55) {

@@ -260,6 +260,12 @@ uniform float uMoonRadii[3];
 uniform vec4 uSatNormals[4];   // xyz normal, w speed
 uniform float uSatPhases[4];
 uniform float uSunSize;
+uniform float uCityCivil;      // 1 = GEMINI civilization below
+uniform vec3 uCityDirs[5];     // city dirs, surface-local space
+uniform vec3 uCityCol;         // city glow tint
+uniform vec3 uCityShadow;      // skyline silhouette colour
+uniform vec3 uCamPosSky;       // camera position in surface-local space
+uniform float uPlanetR;        // planet radius in scene units
 
 varying vec3 vDir;
 
@@ -379,6 +385,40 @@ void main() {
     vec3 satPrev = normalize(b1 * cos(theta - 0.015) + b2 * sin(theta - 0.015));
     float trail = gaussian(acos(clamp(dot(d, satPrev), -1.0, 1.0)), 0.006);
     col += vec3(0.7, 0.95, 0.85) * trail * 0.25 * (0.35 + 0.65 * night);
+  }
+
+  // --- GEMINI civilization: horizon city glows + skyline silhouettes ---
+  // Cities sit on the curved surface, so their true bearing from the camera
+  // (uCamPosSky) is computed per fragment and hugs the local horizon.
+  if (uCityCivil > 0.5) {
+    float skyAz = atan(d.z, d.x);
+    float skyline = 0.0;
+    vec3 windowLights = vec3(0.0);
+    vec3 glowCol = vec3(0.0);
+    for (int i = 0; i < 5; i++) {
+      vec3 toCity = normalize(uCityDirs[i] * uPlanetR - uCamPosSky);
+      float ang = acos(clamp(dot(d, toCity), -1.0, 1.0));
+      float horizon = 1.0 - smoothstep(0.05, 0.35, abs(toCity.y));
+      glowCol += uCityCol * smoothstep(0.5, 0.015, ang) * horizon;
+      if (horizon > 0.5) {
+        float dAz = abs(mod(skyAz - atan(toCity.z, toCity.x) + 3.14159265359, 6.28318530718) - 3.14159265359);
+        if (dAz < 0.05) {
+          float block = floor(skyAz * 90.0);
+          float hgt = (hash12(vec2(block, 1.0)) + hash12(vec2(block * 0.37, 2.0)) * 0.5) * 0.2;
+          float spike = step(0.85, hash12(vec2(block, 3.0))) * 0.35;
+          float top = hgt + spike;
+          if (d.y < top && d.y > -0.015) {
+            float sil = 1.0 - smoothstep(0.006, 0.04, top - d.y);
+            skyline = max(skyline, sil);
+            float win = step(0.4, hash12(vec2(floor(d.y * 80.0), block)));
+            windowLights += uCityCol * win * sil * 0.6;
+          }
+        }
+      }
+    }
+    col += glowCol * 0.85 * (0.3 + 0.7 * uNightFactor);
+    col = mix(col, uCityShadow * 0.85, skyline * 0.9);
+    col += windowLights * (0.3 + 0.7 * uNightFactor);
   }
 
   gl_FragColor = vec4(col, 1.0);

@@ -121,12 +121,21 @@ export interface PlanetConfig {
   // GEMINI: surface gravity in m/s² (≈1.62 = Moon-like). Omit → existing
   // free-walk surface behaviour with no jumping.
   surfaceGravity?: number;
-  // GEMINI: jump apex height in planet radii (low-gravity worlds only)
+  // GEMINI: jump apex height in meters (low-gravity worlds only)
   surfaceJumpHeight?: number;
   // GEMINI: full day/night rotation length in sim-seconds (20 min = 1200)
   surfaceDayLength?: number;
   // GEMINI: scattered vegetation instances (omit → no vegetation, as today)
   surfaceVegetationCount?: number;
+  // GEMINI: camera height above terrain in planet radii (0.02 = legacy
+  // stylized view; ≈0.0019 = ~1.7 m human eye at GEMINI's scale)
+  surfaceCameraHeight?: number;
+  // GEMINI: comfortable walk speed in meters/second (legacy worlds keep the
+  // fast planet-radii walk)
+  surfaceWalkSpeed?: number;
+  // GEMINI: render the living civilization — orbit night lights, horizon
+  // city glows, and the capital with NPCs, robots and air traffic
+  surfaceCivilization?: boolean;
 }
 
 export interface StarConfig {

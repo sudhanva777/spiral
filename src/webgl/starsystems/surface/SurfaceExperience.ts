@@ -4,6 +4,7 @@ import type { GalaxyConfig } from '../../../types/universe';
 import { MoonMesh } from '../MoonMesh';
 import { generateGalaxyParticles } from '../../utils/galaxyMath';
 import { IC1579_CONFIG } from '../../galaxies/registry';
+import { GEMINI_CITY_DIRS } from './cityDirs';
 import {
   surfaceTerrainVertexShader,
   surfaceTerrainFragmentShader,
@@ -391,6 +392,22 @@ export class SurfaceExperience {
         },
         uSatPhases: { value: [0.2, 1.7, 3.1, 4.6] },
         uSunSize: { value: 0.24 },
+        uCityCivil: { value: config.surfaceCivilization ? 1 : 0 },
+        uCityDirs: {
+          value: config.surfaceCivilization
+            ? GEMINI_CITY_DIRS.map((d) => d.clone())
+            : [
+                new THREE.Vector3(0, 1, 0),
+                new THREE.Vector3(0, 1, 0),
+                new THREE.Vector3(0, 1, 0),
+                new THREE.Vector3(0, 1, 0),
+                new THREE.Vector3(0, 1, 0),
+              ],
+        },
+        uCityCol: { value: new THREE.Color(0.88, 1.0, 0.94) },
+        uCityShadow: { value: new THREE.Color(0.004, 0.011, 0.008) },
+        uCamPosSky: { value: new THREE.Vector3(0, R, 0) },
+        uPlanetR: { value: R },
       },
     });
     this.skyDomeMesh = new THREE.Mesh(skyGeom, this.skyMaterial);
@@ -704,6 +721,7 @@ export class SurfaceExperience {
     this.skyMaterial.uniforms.uGalaxyUp.value.copy(this.galaxyUpLocal);
     this.skyMaterial.uniforms.uNightFactor.value = nightFactor;
     this.skyMaterial.uniforms.uTime.value = time;
+    this.skyMaterial.uniforms.uCamPosSky.value.copy(this.tmpV);
 
     this.terrainMaterial.uniforms.uSunDir.value.copy(sunDir);
     this.terrainMaterial.uniforms.uNightFactor.value = nightFactor;

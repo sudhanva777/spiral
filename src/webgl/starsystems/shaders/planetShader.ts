@@ -27,6 +27,9 @@ uniform vec3 uPrimaryColor;
 uniform vec3 uSecondaryColor;
 uniform vec3 uAccentColor;
 uniform vec3 uLightPosition; // Star world position
+uniform float uCityLights;   // 1 = civilization night lights (GEMINI)
+uniform vec3 uCityDirs[5];   // city directions in planet model space
+uniform vec3 uCityLightCol;  // city glow tint
 
 varying vec3 vNormal;
 varying vec3 vPosition;
@@ -74,6 +77,26 @@ void main() {
       if (isPole < 0.3) {
         finalColor += vec3(1.0, 0.95, 0.9) * specular * 0.75 * nDotL;
       }
+    }
+
+    // GEMINI civilization: night-side city lights visible from orbit
+    if (uCityLights > 0.5) {
+      float nightSide = 1.0 - smoothstep(-0.05, 0.14, nDotL);
+      vec3 dir = normalize(vPosition);
+      float cityGlow = 0.0;
+      float coreSum = 0.0;
+      for (int i = 0; i < 5; i++) {
+        float ang = acos(clamp(dot(dir, uCityDirs[i]), -1.0, 1.0));
+        float metro = smoothstep(0.34, 0.06, ang);
+        float core = smoothstep(0.09, 0.02, ang);
+        coreSum += core;
+        cityGlow += metro * (0.55 + 0.45 * snoise(dir * 9.0 + float(i) * 3.1));
+      }
+      float scatter = smoothstep(0.55, 0.85, snoise(dir * 7.0 + 1.7));
+      float glow = clamp(cityGlow * 0.55 + scatter * 0.12 + coreSum * 1.15, 0.0, 1.0);
+      finalColor += uCityLightCol * glow * nightSide * 1.35;
+      // Subtle haze over inhabited regions, also readable at twilight
+      finalColor += uCityLightCol * glow * smoothstep(0.02, 0.35, nDotL) * 0.1;
     }
 
   } else if (uPlanetType == 1) {

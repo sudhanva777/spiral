@@ -172,6 +172,16 @@ export interface SurfaceState {
   altitude: number; // 0.0 (ground) to 1.0 (upper atmosphere)
 }
 
+export interface SurfaceInteraction {
+  id: string;
+  name: string;
+  title: string;
+  prompt: string; // HUD action label: TALK / INSPECT
+  dialogue: string[];
+  lineIndex: number;
+  active: boolean; // dialogue panel open
+}
+
 export interface UniverseState {
   activeGalaxyId: string;
   isNavigating: boolean;
@@ -194,6 +204,7 @@ export interface UniverseState {
   scaleLevel?: ScaleLevel;
   navigationMode?: NavigationMode;
   surfaceState?: SurfaceState;
+  surfaceInteraction?: SurfaceInteraction | null;
   discoveredFeatures?: string[];
   activeDiscoveryTag?: string | null;
 }

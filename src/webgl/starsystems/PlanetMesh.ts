@@ -12,6 +12,9 @@ import {
 } from './shaders/planetShader';
 import { MoonMesh } from './MoonMesh';
 import { LocalAsteroids } from './LocalAsteroids';
+import { GEMINI_CITY_DIRS } from './surface/cityDirs';
+
+export const GEMINI_CITY_LIGHT_COL = '#CFFFE0';
 
 function getPlanetTypeIndex(type: PlanetType): number {
   switch (type) {
@@ -72,6 +75,13 @@ export class PlanetMesh {
         uSecondaryColor: { value: new THREE.Color(config.secondaryColor) },
         uAccentColor: { value: new THREE.Color(config.accentColor || config.secondaryColor) },
         uLightPosition: { value: new THREE.Vector3(0, 0, 0) },
+        uCityLights: { value: config.surfaceCivilization ? 1 : 0 },
+        uCityDirs: {
+          value: config.surfaceCivilization
+            ? GEMINI_CITY_DIRS.map((d) => d.clone())
+            : [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()],
+        },
+        uCityLightCol: { value: new THREE.Color(GEMINI_CITY_LIGHT_COL) },
       },
     });
 

@@ -91,6 +91,18 @@ export class SoundSynthesizer {
     return this.isPlaying;
   }
 
+  /**
+   * Mobile-friendly audio unlock — browsers suspend the AudioContext until a
+   * user gesture. Call from any first pointer/key interaction; safe no-op
+   * elsewhere. Ambient drones resume without needing a second toggle.
+   */
+  public unlock() {
+    if (!this.ctx) return;
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
+  }
+
   // ------------------------------------------------------------------
   // UNIVERSAL phenomenon audio — subtle, contextual, never musical.
   // ------------------------------------------------------------------
@@ -130,6 +142,73 @@ export class SoundSynthesizer {
     osc.start(t);
     osc.stop(t + 1.5);
   }
+
+  // ------------------------------------------------------------------
+  // GEMINI living world — city ambience bed
+  // ------------------------------------------------------------------
+
+  /** Set the capital-city ambience level (0 = off, 1 = full bed). */
+  public cityAmbience(level: number) {
+    if (!this.ctx || !this.isPlaying) return;
+    const t = this.ctx.currentTime;
+    if (level <= 0) {
+      if (this.cityHum) {
+        this.cityHumGain?.gain.setTargetAtTime(0.0001, t, 0.8);
+        this.cityWindGain?.gain.setTargetAtTime(0.0001, t, 1.2);
+      }
+      return;
+    }
+    if (!this.cityHum) {
+      // Low warm hum — the city's power grid breathing.
+      this.cityHum = this.ctx.createOscillator();
+      this.cityHum.type = 'sine';
+      this.cityHum.frequency.setValueAtTime(52.0, t);
+      this.cityHum2 = this.ctx.createOscillator();
+      this.cityHum2.type = 'sine';
+      this.cityHum2.frequency.setValueAtTime(52.6, t);
+      this.cityHumGain = this.ctx.createGain();
+      this.cityHumGain.gain.value = 0.0001;
+      const cityFilter = this.ctx.createBiquadFilter();
+      cityFilter.type = 'lowpass';
+      cityFilter.frequency.value = 180;
+      this.cityHum.connect(cityFilter);
+      this.cityHum2.connect(cityFilter);
+      cityFilter.connect(this.cityHumGain);
+      this.cityHumGain.connect(this.masterGain!);
+      this.cityHum.start();
+      this.cityHum2.start();
+
+      // Soft filtered wind across the plaza.
+      const noiseLen = this.ctx.sampleRate * 2;
+      const buffer = this.ctx.createBuffer(1, noiseLen, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < noiseLen; i++) {
+        data[i] = (Math.random() * 2 - 1) * (1 - i / noiseLen) * 0.6;
+      }
+      this.cityWind = this.ctx.createBufferSource();
+      this.cityWind.buffer = buffer;
+      this.cityWind.loop = true;
+      const windFilter = this.ctx.createBiquadFilter();
+      windFilter.type = 'bandpass';
+      windFilter.frequency.value = 420;
+      windFilter.Q.value = 0.6;
+      this.cityWindGain = this.ctx.createGain();
+      this.cityWindGain.gain.value = 0.0001;
+      this.cityWind.connect(windFilter);
+      windFilter.connect(this.cityWindGain);
+      this.cityWindGain.connect(this.masterGain!);
+      this.cityWind.start();
+    }
+    const l = Math.max(0, Math.min(1, level));
+    this.cityHumGain?.gain.setTargetAtTime(0.03 * l, t, 1.5);
+    this.cityWindGain?.gain.setTargetAtTime(0.014 * l, t, 2.5);
+  }
+
+  private cityHum: OscillatorNode | null = null;
+  private cityHum2: OscillatorNode | null = null;
+  private cityHumGain: GainNode | null = null;
+  private cityWind: AudioBufferSourceNode | null = null;
+  private cityWindGain: GainNode | null = null;
 }
 
 export const soundSynthesizer = new SoundSynthesizer();

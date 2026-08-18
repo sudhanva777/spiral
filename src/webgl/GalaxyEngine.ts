@@ -10,7 +10,10 @@ import { GalaxyInstance } from './galaxies/GalaxyInstance';
 import { UNIVERSE_GALAXIES } from './galaxies/registry';
 import { PostProcessingPipeline } from './PostProcessing';
 import { SurfaceExperience } from './starsystems/surface/SurfaceExperience';
-import { getQualityConfigForTier } from './utils/deviceDetection';
+import { GeminiCivilization } from './starsystems/surface/GeminiCivilization';
+import type { CivilInteractable } from './starsystems/surface/GeminiCivilization';
+import { GEMINI_CITY_DIRS, EMERIA_CITY_INDEX } from './starsystems/surface/cityDirs';
+import { getQualityConfigForTier, effectivePixelRatio } from './utils/deviceDetection';
 import type { GalaxyPreset, InteractionState, QualityTier, SimulationStats } from '../types/simulation';
 import type { NavigationMode, UniverseState, ScaleLevel } from '../types/universe';
 import { soundSynthesizer } from '../components/SoundSynthesizer';
@@ -145,6 +148,20 @@ export class GalaxyEngine {
   private surfaceJumpVelocity = 0; // planet-radii / s
   private surfaceVerticalVelocity = 0; // planet-radii / s
   private surfaceAltitude = 0; // planet-radii above the ground
+
+  // GEMINI living world — human-scale camera, meters-based walk, and the
+  // capital city civilization (NPCs, robots, traffic, dialogue).
+  private civil: GeminiCivilization | null = null;
+  private surfaceCivilization = false;
+  private humanScale = false;
+  private surfaceCameraHeightFraction = 0.02; // planet radii above terrain
+  private surfaceWalkSpeed = 0; // scene units / s (0 → legacy planet walk)
+  private interactionTarget: CivilInteractable | null = null;
+  private dialogueActive = false;
+  private dialogueIndex = 0;
+  private dialogueLines: string[] = [];
+  private dialogueTargetId: string | null = null;
+  private tmpInteractionDir = new THREE.Vector3();
   private exitContext: {
     pos: THREE.Vector3;
     look: THREE.Vector3;
@@ -176,6 +193,22 @@ export class GalaxyEngine {
   private lastFpsUpdate = 0;
   private currentFps = 60;
   private statsCallback?: (stats: SimulationStats) => void;
+
+  // Adaptive Dynamic Resolution — FPS-triggered pixel-ratio scaling with
+  // hysteresis (never oscillates, recovers slowly, floors at 65%).
+  private resolutionScale = 1.0;
+  private fpsEma = 60;
+  private lowFpsTimer = 0;
+  private highFpsTimer = 0;
+
+  // Responsive resize architecture — container observation catches mobile
+  // URL-bar / orientation / split-screen changes that window resize misses.
+  private resizeObserver: ResizeObserver | null = null;
+  private onOrientationChange: () => void = () => this.onWindowResize();
+  private onVisualViewportChange: () => void = () => this.onWindowResize();
+
+  // GEMINI mobile touch input — virtual stick (normalized) + action triggers
+  private surfaceStick = new THREE.Vector2(0, 0);
 
   // Temp vectors for gravitational lensing & projection
   private projectedScreenPos = new THREE.Vector3();
@@ -273,7 +306,9 @@ export class GalaxyEngine {
       width,
       height,
       config.bloomStrength,
-      config.bloomRadius
+      config.bloomRadius,
+      0.7,
+      qualityTier === 'low' ? 0 : 4
     );
     this.postProcessing.setEnabled(config.bloomEnabled);
 
@@ -308,12 +343,36 @@ export class GalaxyEngine {
     this.renderer.domElement.style.touchAction = 'none';
     this.controls.update();
 
-    // 9. Event Listeners
+    // 9. Event Listeners — container-level observation catches every viewport
+    // change (mobile URL bars, orientation, split-screen, zoom) that the
+    // window 'resize' event alone would miss.
     this.initEventListeners();
 
     // 10. Start Animation Loop
     this.animate = this.animate.bind(this);
     this.animate();
+  }
+
+  /** Push one effective pixel ratio to every render consumer (renderer,
+   *  composer, particle systems, surface, cosmic objects). */
+  private applyPixelRatio(pixelRatio: number) {
+    this.renderer.setPixelRatio(pixelRatio);
+    this.postProcessing.setPixelRatio(pixelRatio);
+    this.galaxies.forEach((g) => g.setPixelRatio(pixelRatio));
+    this.nebula.setPixelRatio(pixelRatio);
+    this.starfield.setPixelRatio(pixelRatio);
+    this.foregroundDust.setPixelRatio(pixelRatio);
+    this.cosmicWeb.setPixelRatio(pixelRatio);
+    this.cosmicObjects.setPixelRatio(pixelRatio);
+    this.surfaceExperience?.setPixelRatio(pixelRatio);
+  }
+
+  /** Adaptive dynamic-resolution step — floor 0.65, ceiling 1.0, slow recover. */
+  private setResolutionScale(scale: number) {
+    const next = Math.max(0.65, Math.min(1.0, scale));
+    if (Math.abs(next - this.resolutionScale) < 0.001) return;
+    this.resolutionScale = next;
+    this.applyPixelRatio(effectivePixelRatio(this.qualityTier, this.resolutionScale));
   }
 
   private updateControlsScale() {
@@ -463,6 +522,18 @@ export class GalaxyEngine {
         scaleLevel: this.getScaleLevel(),
         navigationMode: this.computeNavigationMode(),
         surfaceState: this.getSurfaceState(),
+        surfaceInteraction:
+          this.isOnSurface && this.civil && this.interactionTarget
+            ? {
+                id: this.interactionTarget.id,
+                name: this.interactionTarget.name,
+                title: this.interactionTarget.title,
+                prompt: this.interactionTarget.prompt,
+                dialogue: this.dialogueLines,
+                lineIndex: this.dialogueIndex,
+                active: this.dialogueActive,
+              }
+            : null,
         activeDiscoveryTag: this.getActiveDiscoveryTag(),
       });
 
@@ -570,6 +641,39 @@ export class GalaxyEngine {
       if (sys?.config.discoveryTag) return sys.config.discoveryTag;
     }
     return null;
+  }
+
+  // ------------------------------------------------------------------
+  // Touch input API — normalized actions consumed by the engine so the
+  // mobile and desktop control schemes never diverge.
+  // ------------------------------------------------------------------
+
+  /** Virtual joystick: normalized x (strafe) / y (forward is -y) in [-1, 1]. */
+  public setSurfaceStickInput(x: number, y: number) {
+    this.surfaceStick.set(Math.max(-1, Math.min(1, x)), Math.max(-1, Math.min(1, y)));
+  }
+
+  /** Touch equivalent of the Space jump key on low-gravity surfaces. */
+  public triggerSurfaceJump() {
+    if (
+      this.isOnSurface &&
+      this.surfaceGravity > 0 &&
+      this.surfaceAltitude <= (this.humanScale ? 0.0002 : 0.001) &&
+      !this.isTransitioningCamera
+    ) {
+      this.surfaceVerticalVelocity = this.surfaceJumpVelocity;
+    }
+  }
+
+  /** Touch equivalent of the E key — advance dialogue or talk to the target. */
+  public triggerSurfaceInteract() {
+    if (this.isOnSurface && this.civil && this.surfaceCivilization) {
+      if (this.dialogueActive) {
+        this.advanceDialogue();
+      } else if (this.interactionTarget) {
+        this.beginDialogue(this.interactionTarget);
+      }
+    }
   }
 
   /**
@@ -918,6 +1022,34 @@ export class GalaxyEngine {
     soundSynthesizer.pulsarTick();
   }
 
+  private beginDialogue(target: CivilInteractable) {
+    this.dialogueActive = true;
+    this.dialogueIndex = 0;
+    this.dialogueLines = target.dialogue;
+    this.dialogueTargetId = target.id;
+    this.civil?.setInteractionFocus(target.id);
+    this.emitUniverseState();
+  }
+
+  private advanceDialogue() {
+    if (!this.dialogueActive) return;
+    this.dialogueIndex++;
+    if (this.dialogueIndex >= this.dialogueLines.length) {
+      this.closeDialogue();
+      return;
+    }
+    this.emitUniverseState();
+  }
+
+  private closeDialogue() {
+    this.dialogueActive = false;
+    this.dialogueIndex = 0;
+    this.dialogueLines = [];
+    this.dialogueTargetId = null;
+    this.civil?.setInteractionFocus(null);
+    this.emitUniverseState();
+  }
+
   /**
    * Direct cinematic entry to a habitable planet's surface: fly to the
    * planet, then descend through its atmosphere to the surface.
@@ -946,16 +1078,34 @@ export class GalaxyEngine {
 
     this.isOnSurface = true;
     this.surfaceRadius = planet.config.radius;
-    // GEMINI-style moon gravity: PlanetConfig.surfaceGravity in m/s² is
-    // mapped to planet-radii scale (×0.25) — walking stays comfortable
-    // while jumps feel light and floaty.
-    this.surfaceGravity = (planet.config.surfaceGravity ?? 0) * 0.25;
-    this.surfaceJumpVelocity =
-      this.surfaceGravity > 0
-        ? Math.sqrt(2.0 * this.surfaceGravity * (planet.config.surfaceJumpHeight ?? 0.16))
-        : 0;
+    // GEMINI-style moon gravity: PlanetConfig.surfaceGravity (m/s²) mapped
+    // through the human-scale unit (UM = radius × 0.0011) into planet-radii
+    // units, so jumps reach exactly the configured apex height in meters.
+    const g = planet.config.surfaceGravity ?? 0;
+    if (g > 0) {
+      this.surfaceGravity = g * 0.0011; // radii / s² (1.62 m/s² → floaty hops)
+      const jumpH = (planet.config.surfaceJumpHeight ?? 1.2) * 0.0011; // radii
+      this.surfaceJumpVelocity = Math.sqrt(2.0 * this.surfaceGravity * jumpH);
+    } else {
+      this.surfaceGravity = 0;
+      this.surfaceJumpVelocity = 0;
+    }
     this.surfaceVerticalVelocity = 0;
     this.surfaceAltitude = 0;
+
+    // GEMINI living world: human-scale walk, low camera, civilization
+    this.surfaceCivilization = !!planet.config.surfaceCivilization;
+    this.humanScale = this.surfaceCivilization || !!planet.config.surfaceCameraHeight;
+    this.surfaceCameraHeightFraction = planet.config.surfaceCameraHeight ?? 0.02;
+    this.surfaceWalkSpeed = this.humanScale
+      ? (planet.config.surfaceWalkSpeed ?? 1.4) * planet.config.radius * 0.0011
+      : 0;
+    this.dialogueActive = false;
+    this.dialogueIndex = 0;
+    this.dialogueLines = [];
+    this.dialogueTargetId = null;
+    this.interactionTarget = null;
+
     this.setState('CORE_TRANSITION');
 
     // Lazily build the surface experience (height-map bake happens once)
@@ -970,6 +1120,17 @@ export class GalaxyEngine {
     }
     this.surfaceExperience.setActive(true);
 
+    // GEMINI civilization — built once with the surface experience group
+    if (this.surfaceCivilization && !this.civil && this.surfaceExperience) {
+      this.civil = new GeminiCivilization(planet.config, this.surfaceExperience.group, (dir) =>
+        this.surfaceExperience!.sampleTerrainRadiusAt(
+          dir,
+          this.surfaceExperience!.getTerrainScale()
+        )
+      );
+      soundSynthesizer.cityAmbience(0.7);
+    }
+
     // Hide everything the surface sky replaces
     galaxy.particles.points.visible = false;
     if (galaxy.energyJets) galaxy.energyJets.points.visible = false;
@@ -981,13 +1142,18 @@ export class GalaxyEngine {
 
     this.updateControlsScale();
 
-    // Dive from current orbit down to just above the cloud deck
+    // Dive from current orbit down to just above the cloud deck. On GEMINI
+    // the descent is retargeted toward the capital so the first thing the
+    // visitor sees is the city rising over the curve of the world.
     const planetPos = new THREE.Vector3();
     planet.group.getWorldPosition(planetPos);
-    const camDir = new THREE.Vector3().copy(this.camera.position).sub(planetPos);
-    if (camDir.lengthSq() < 0.0001) camDir.set(0, 0.25, 1);
-    camDir.normalize();
-    const targetPos = planetPos.clone().addScaledVector(camDir, planet.config.radius * 1.12);
+    let landDir = new THREE.Vector3().copy(this.camera.position).sub(planetPos);
+    if (landDir.lengthSq() < 0.0001) landDir.set(0, 0.25, 1);
+    landDir.normalize();
+    if (this.surfaceCivilization) {
+      landDir.copy(GEMINI_CITY_DIRS[EMERIA_CITY_INDEX]).transformDirection(planet.axialGroup.matrixWorld);
+    }
+    const targetPos = planetPos.clone().addScaledVector(landDir, planet.config.radius * 1.12);
     this.startCameraTransition(targetPos, planetPos, 3.4);
     this.emitUniverseState();
   }
@@ -1001,6 +1167,20 @@ export class GalaxyEngine {
     this.surfaceJumpVelocity = 0;
     this.surfaceVerticalVelocity = 0;
     this.surfaceAltitude = 0;
+    this.surfaceCivilization = false;
+    this.humanScale = false;
+    this.surfaceCameraHeightFraction = 0.02;
+    this.surfaceWalkSpeed = 0;
+    this.interactionTarget = null;
+    this.dialogueActive = false;
+    this.dialogueIndex = 0;
+    this.dialogueLines = [];
+    this.dialogueTargetId = null;
+    if (this.civil) {
+      this.civil.dispose();
+      this.civil = null;
+    }
+    soundSynthesizer.cityAmbience(0);
     if (this.surfaceExperience) this.surfaceExperience.setActive(false);
 
     const galaxy = this.getActiveGalaxy();
@@ -1047,9 +1227,19 @@ export class GalaxyEngine {
     this.onKeyUp = this.onKeyUp.bind(this);
 
     window.addEventListener('resize', this.onWindowResize, { passive: true });
+    window.addEventListener('orientationchange', this.onOrientationChange, { passive: true });
     window.addEventListener('mousemove', this.onPointerMove, { passive: true });
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
+
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(() => this.onWindowResize());
+      this.resizeObserver.observe(this.container);
+    }
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', this.onVisualViewportChange);
+      window.visualViewport.addEventListener('scroll', this.onVisualViewportChange);
+    }
 
     const canvas = this.renderer.domElement;
     canvas.addEventListener('pointerdown', this.onPointerDown, { passive: true });
@@ -1065,18 +1255,9 @@ export class GalaxyEngine {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
 
-    const config = getQualityConfigForTier(this.qualityTier);
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(config.dpr);
+    this.applyPixelRatio(effectivePixelRatio(this.qualityTier, this.resolutionScale));
     this.postProcessing.setSize(width, height);
-
-    this.galaxies.forEach((g) => g.setPixelRatio(config.dpr));
-    this.nebula.setPixelRatio(config.dpr);
-    this.starfield.setPixelRatio(config.dpr);
-    this.foregroundDust.setPixelRatio(config.dpr);
-    this.cosmicWeb.setPixelRatio(config.dpr);
-    this.cosmicObjects.setPixelRatio(config.dpr);
-    this.surfaceExperience?.setPixelRatio(config.dpr);
   }
 
   private onPointerMove(e: MouseEvent) {
@@ -1101,6 +1282,13 @@ export class GalaxyEngine {
     const deltaX = Math.abs(e.clientX - this.pointerDownPos.x);
     const deltaY = Math.abs(e.clientY - this.pointerDownPos.y);
     const elapsed = performance.now() - this.pointerDownTime;
+
+    // Long-press on the GEMINI surface = contextual interaction (touch
+    // equivalent of the E key). Never fires for drags or taps.
+    if (elapsed > 450 && deltaX < 12 && deltaY < 12 && this.isOnSurface) {
+      this.triggerSurfaceInteract();
+      return;
+    }
 
     if (deltaX < 6 && deltaY < 6 && elapsed < 320) {
       this.handleCanvasClick(e.clientX, e.clientY);
@@ -1397,12 +1585,23 @@ export class GalaxyEngine {
     }
 
     if (e.key === 'Escape') {
-      if (this.isOnSurface) {
+      if (this.isOnSurface && this.dialogueActive) {
+        this.closeDialogue();
+      } else if (this.isOnSurface) {
         this.exitSurface();
       } else if (this.activeMoonId || this.activePlanetId || this.activeSystemId) {
         this.exitStarSystem();
       } else if (this.activeCosmicObjectId) {
         this.exitCosmicObject();
+      }
+    } else if (e.key === 'e' || e.key === 'E') {
+      if (this.isOnSurface && this.civil && this.surfaceCivilization) {
+        e.preventDefault();
+        if (this.dialogueActive) {
+          this.advanceDialogue();
+        } else if (this.interactionTarget) {
+          this.beginDialogue(this.interactionTarget);
+        }
       }
     } else if (e.key === 'r' || e.key === 'R') {
       if (this.isOnSurface) {
@@ -1415,7 +1614,7 @@ export class GalaxyEngine {
         this.toggleCoreInspection();
       }
     } else if (e.key === ' ' || e.code === 'Space') {
-      if (this.isOnSurface && this.surfaceGravity > 0 && this.surfaceAltitude <= 0.001 && !this.isTransitioningCamera) {
+      if (this.isOnSurface && this.surfaceGravity > 0 && this.surfaceAltitude <= (this.humanScale ? 0.0002 : 0.001) && !this.isTransitioningCamera) {
         // Low-gravity leap (GEMINI) — Space doubles as the jump key while
         // standing on a moon-gravity world.
         e.preventDefault();
@@ -1457,9 +1656,12 @@ export class GalaxyEngine {
 
   public setQualityTier(tier: QualityTier) {
     this.qualityTier = tier;
+    this.resolutionScale = 1.0;
+    this.lowFpsTimer = 0;
+    this.highFpsTimer = 0;
     const config = getQualityConfigForTier(tier);
 
-    this.renderer.setPixelRatio(config.dpr);
+    this.applyPixelRatio(effectivePixelRatio(tier, 1.0));
     this.galaxies.forEach((g) => {
       g.setPixelRatio(config.dpr);
       g.rebuild(config.particleCount);
@@ -1499,6 +1701,7 @@ export class GalaxyEngine {
     total += this.foregroundDust.points.geometry.attributes.position ? this.foregroundDust.points.geometry.attributes.position.count : 0;
     total += this.cosmicWeb.points.geometry.attributes.position ? this.cosmicWeb.points.geometry.attributes.position.count : 0;
     total += this.cosmicObjects.getParticleCount();
+    if (this.civil) total += this.civil.getParticleCount();
     return total;
   }
 
@@ -1667,7 +1870,7 @@ export class GalaxyEngine {
         const upDir = this.tmpSurfaceDir.copy(this.camera.position).sub(this.tmpPlanetPos).normalize();
         this.camera.up.copy(upDir);
 
-        if (this.surfaceMoveKeys.size > 0) {
+        if (this.surfaceMoveKeys.size > 0 || this.surfaceStick.lengthSq() > 0.01) {
           const fwd = this.camera.getWorldDirection(this.tmpPlanetLocalDir);
           fwd.addScaledVector(upDir, -fwd.dot(upDir));
           if (fwd.lengthSq() < 0.0001) fwd.set(0, 0, -1);
@@ -1678,9 +1881,17 @@ export class GalaxyEngine {
           if (this.surfaceMoveKeys.has('s') || this.surfaceMoveKeys.has('arrowdown')) move.sub(fwd);
           if (this.surfaceMoveKeys.has('d') || this.surfaceMoveKeys.has('arrowright')) move.add(right);
           if (this.surfaceMoveKeys.has('a') || this.surfaceMoveKeys.has('arrowleft')) move.sub(right);
+          if (this.surfaceStick.lengthSq() > 0.01) {
+            move.addScaledVector(fwd, -this.surfaceStick.y);
+            move.addScaledVector(right, this.surfaceStick.x);
+          }
           if (move.lengthSq() > 0) {
-            // Planetary-scale walking speed (world radii per second)
-            move.normalize().multiplyScalar(this.surfaceRadius * 1.5 * rawDelta);
+            // Human-scale worlds walk in meters per second; legacy worlds
+            // keep the fast planet-radii stroll.
+            const walkSpeed = this.humanScale && this.surfaceWalkSpeed > 0
+              ? this.surfaceWalkSpeed
+              : this.surfaceRadius * 1.5;
+            move.normalize().multiplyScalar(walkSpeed * rawDelta);
             this.controls.target.add(move);
           }
         }
@@ -1706,7 +1917,10 @@ export class GalaxyEngine {
           this.tmpPlanetLocalDir,
           this.surfaceExperience.getTerrainScale()
         );
-        const minDist = Math.max(terrainR + this.surfaceRadius * 0.02, this.surfaceRadius * 1.02);
+        const minDist = Math.max(
+          terrainR + this.surfaceRadius * this.surfaceCameraHeightFraction,
+          this.humanScale ? 0 : this.surfaceRadius * 1.02
+        );
         if (dist < minDist) {
           this.tmpClampedPos.copy(this.tmpPlanetPos).addScaledVector(dir, minDist);
           this.controls.target.add(this.tmpClampedPos.clone().sub(this.camera.position));
@@ -1834,6 +2048,33 @@ export class GalaxyEngine {
         // Terrain rises out of the shell as we approach (masks the swap)
         const terrainFade = THREE.MathUtils.smoothstep(2.2, 1.15, camDistR);
         this.surfaceExperience.setTerrainScale(0.78 + 0.22 * terrainFade);
+
+        // GEMINI living world: animate the city, keep the visitor out of
+        // building footprints, and raycast the nearest interactable.
+        if (this.civil) {
+          this.civil.update(
+            effectiveTime,
+            rawDelta,
+            this.surfaceExperience.getNightFactor(),
+            this.camera
+          );
+          this.civil.worldToCity(this.camera.position, this.tmpPlanetLocalDir);
+          this.civil.collidePlayer(this.tmpPlanetLocalDir);
+          this.civil.cityToWorld(this.tmpPlanetLocalDir, this.tmpClampedPos);
+          this.controls.target.add(this.tmpClampedPos.clone().sub(this.camera.position));
+          this.camera.position.copy(this.tmpClampedPos);
+
+          if (this.dialogueActive && this.dialogueTargetId) {
+            this.interactionTarget = this.civil.getInteractable(this.dialogueTargetId);
+          } else {
+            this.tmpInteractionDir.copy(this.camera.getWorldDirection(this.tmpInteractionDir));
+            this.interactionTarget = this.civil.raycast(
+              this.camera.position,
+              this.tmpInteractionDir,
+              3.2
+            );
+          }
+        }
       }
     }
 
@@ -1967,6 +2208,30 @@ export class GalaxyEngine {
       this.frameCount = 0;
       this.lastFpsUpdate = now;
 
+      // Adaptive dynamic resolution — sustained low FPS steps the internal
+      // pixel ratio down (floored at 0.65); sustained headroom recovers it
+      // slowly. Hysteresis prevents quality oscillation.
+      this.fpsEma = this.fpsEma * 0.7 + this.currentFps * 0.3;
+      if (this.fpsEma < 30 && !this.isTransitioningCamera) {
+        this.lowFpsTimer += 0.5;
+        this.highFpsTimer = 0;
+        if (this.lowFpsTimer >= 2.0) {
+          this.lowFpsTimer = 0;
+          this.setResolutionScale(this.resolutionScale - 0.1);
+        }
+      } else {
+        this.lowFpsTimer = 0;
+      }
+      if (this.fpsEma > 55 && this.resolutionScale < 1.0) {
+        this.highFpsTimer += 0.5;
+        if (this.highFpsTimer >= 5.0) {
+          this.highFpsTimer = 0;
+          this.setResolutionScale(this.resolutionScale + 0.05);
+        }
+      } else {
+        this.highFpsTimer = 0;
+      }
+
       this.emitUniverseState();
 
       if (this.statsCallback) {
@@ -1992,9 +2257,19 @@ export class GalaxyEngine {
     }
 
     window.removeEventListener('resize', this.onWindowResize);
+    window.removeEventListener('orientationchange', this.onOrientationChange);
     window.removeEventListener('mousemove', this.onPointerMove);
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
+
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
+    if (window.visualViewport) {
+      window.visualViewport.removeEventListener('resize', this.onVisualViewportChange);
+      window.visualViewport.removeEventListener('scroll', this.onVisualViewportChange);
+    }
 
     const canvas = this.renderer.domElement;
     canvas.removeEventListener('pointerdown', this.onPointerDown);
@@ -2006,6 +2281,8 @@ export class GalaxyEngine {
     this.galaxies.clear();
     this.surfaceExperience?.dispose();
     this.surfaceExperience = null;
+    this.civil?.dispose();
+    this.civil = null;
     this.nebula.dispose();
     this.starfield.dispose();
     this.foregroundDust.dispose();
