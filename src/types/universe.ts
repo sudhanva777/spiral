@@ -122,7 +122,11 @@ export type NavigationMode =
   | 'IC1579_STELLAR' // Inside the galaxy, between its stars
   | 'IC1579_SYSTEM' // Inside a star system within IC 1579
   | 'IC1579_PLANET' // Orbiting a planet/moon within IC 1579
-  | 'IC1579_SURFACE'; // Landed on a surface, night sky = IC 1579
+  | 'IC1579_SURFACE' // Landed on a surface, night sky = IC 1579
+  // AQUILA — the Type-II destination galaxy (external world gateway)
+  | 'AQUILA_GALAXY' // Inside the Aquila galaxy between its stars
+  | 'AQUILA_SYSTEM' // Inside the Type-II star system
+  | 'AQUILA_PLANET'; // Orbiting the Type-II planet / world boundary
 
 /**
  * Common cosmic-object classification — every Universal-level phenomenon
@@ -207,4 +211,6 @@ export interface UniverseState {
   surfaceInteraction?: SurfaceInteraction | null;
   discoveredFeatures?: string[];
   activeDiscoveryTag?: string | null;
+  // AQUILA — external-world handoff status surfaced to the HUD
+  externalWorldState?: import('./world').ExternalWorldState;
 }

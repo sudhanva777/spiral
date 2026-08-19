@@ -6,6 +6,12 @@ import { isWebGLAvailable, detectQualityTier } from '../webgl/utils/deviceDetect
 import { soundSynthesizer } from './SoundSynthesizer';
 import type { GalaxyPreset, InteractionState, QualityTier, SimulationStats } from '../types/simulation';
 import type { UniverseState } from '../types/universe';
+import type { WorldArrivalMode } from '../types/world';
+import {
+  buildWorldHandoffUrl,
+  isWorldReturnMessage,
+  isValidReturnOrigin,
+} from '../worlds/worldConfig';
 
 export const CanvasContainer: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -187,6 +193,97 @@ export const CanvasContainer: React.FC = () => {
     }
   };
 
+  // ------------------------------------------------------------------
+  // EXTERNAL WORLD HANDOFF — Galaxy Explorer → Type-II world
+  // ------------------------------------------------------------------
+  const handoffLaunchTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (handoffLaunchTimerRef.current !== null) {
+        window.clearTimeout(handoffLaunchTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleEnterExternalWorld = useCallback((worldId: string, arrivalMode: WorldArrivalMode) => {
+    const engine = engineRef.current;
+    if (!engine) return;
+
+    // 1. Build the arrival state and resolve the endpoint BEFORE any
+    //    delay — window.open must stay inside the user gesture so
+    //    pop-up blockers do not swallow the launch.
+    engine.beginWorldHandoff(worldId, arrivalMode);
+    const arrival = engine.getWorldArrivalState();
+    if (!arrival) {
+      engine.setWorldHandoffError('Arrival state could not be built.');
+      return;
+    }
+
+    const worldUrl = buildWorldHandoffUrl(arrival);
+    if (!worldUrl) {
+      engine.setWorldHandoffError('New Hospet world is not currently connected.');
+      return;
+    }
+
+    // 2. Launch in a new tab WITHOUT noopener — the external world keeps
+    //    window.opener so it can post the return message back to the
+    //    Galaxy Explorer. This tab stays alive for the return journey.
+    let opened: Window | null = null;
+    try {
+      opened = window.open(worldUrl, '_blank');
+    } catch {
+      opened = null;
+    }
+
+    if (!opened) {
+      engine.setWorldHandoffError('Could not open the New Hospet world. Allow pop-ups for this site and try again.');
+      return;
+    }
+
+    // 3. The cinematic preparing beat plays while the external world
+    //    boots in the background tab; then the state resolves to
+    //    'entered' and the explorer waits for the return signal.
+    if (handoffLaunchTimerRef.current !== null) {
+      window.clearTimeout(handoffLaunchTimerRef.current);
+    }
+    handoffLaunchTimerRef.current = window.setTimeout(() => {
+      engine.confirmWorldHandoff();
+    }, 1600);
+  }, []);
+
+  const handleCancelWorldHandoff = useCallback(() => {
+    if (handoffLaunchTimerRef.current !== null) {
+      window.clearTimeout(handoffLaunchTimerRef.current);
+      handoffLaunchTimerRef.current = null;
+    }
+    engineRef.current?.cancelWorldHandoff();
+  }, []);
+
+  // ------------------------------------------------------------------
+  // EXTERNAL WORLD RETURN HANDSHAKE — Type-II world → Galaxy Explorer
+  //
+  // The external world posts a return message to window.opener. Origin is
+  // validated against the configured Type-II endpoint before the engine
+  // restores the player to orbit.
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    const handleWorldReturn = (event: MessageEvent) => {
+      if (!isWorldReturnMessage(event.data)) return;
+      if (!isValidReturnOrigin(event.origin)) {
+        console.warn('[WORLD RETURN] ignored return message from unexpected origin', event.origin);
+        return;
+      }
+      const engine = engineRef.current;
+      if (!engine) return;
+      engine.restoreFromWorld(event.data);
+    };
+    window.addEventListener('message', handleWorldReturn);
+    return () => {
+      window.removeEventListener('message', handleWorldReturn);
+    };
+  }, []);
+
   if (!hasWebGL) {
     return <WebGLFallback />;
   }
@@ -220,6 +317,8 @@ export const CanvasContainer: React.FC = () => {
         onSurfaceStickInput={handleSurfaceStickInput}
         onSurfaceJump={handleSurfaceJump}
         onSurfaceInteract={handleSurfaceInteract}
+        onEnterExternalWorld={handleEnterExternalWorld}
+        onCancelWorldHandoff={handleCancelWorldHandoff}
       />
     </div>
   );

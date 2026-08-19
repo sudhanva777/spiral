@@ -12,7 +12,7 @@ import {
 } from './shaders/planetShader';
 import { MoonMesh } from './MoonMesh';
 import { LocalAsteroids } from './LocalAsteroids';
-import { GEMINI_CITY_DIRS } from './surface/cityDirs';
+import { getCityDirsForPlanet } from './surface/cityDirs';
 
 export const GEMINI_CITY_LIGHT_COL = '#CFFFE0';
 
@@ -62,6 +62,8 @@ export class PlanetMesh {
 
     const radius = config.radius;
     const typeIdx = getPlanetTypeIndex(config.type);
+    const cityDirs = getCityDirsForPlanet(config);
+    const cityLightCol = new THREE.Color(config.cityTheme?.glow ?? GEMINI_CITY_LIGHT_COL);
 
     // 1. Planetary Surface
     const surfaceGeom = new THREE.SphereGeometry(radius, 32, 32);
@@ -78,10 +80,10 @@ export class PlanetMesh {
         uCityLights: { value: config.surfaceCivilization ? 1 : 0 },
         uCityDirs: {
           value: config.surfaceCivilization
-            ? GEMINI_CITY_DIRS.map((d) => d.clone())
+            ? cityDirs.map((d) => d.clone())
             : [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()],
         },
-        uCityLightCol: { value: new THREE.Color(GEMINI_CITY_LIGHT_COL) },
+        uCityLightCol: { value: cityLightCol },
       },
     });
 

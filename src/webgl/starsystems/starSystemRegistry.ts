@@ -1,5 +1,7 @@
 import type { StarSystemConfig } from '../../types/starSystem';
 import { getIC1579StarSystemById, IC1579_STAR_SYSTEMS } from './ic1579StarSystems';
+import { AQUILA_TYPE2_SYSTEM } from './aquilaType2System';
+import { AQUILA_GALAXY_ID } from '../../worlds/worldRegistry';
 
 export const PRIME_GALAXY_STAR_SYSTEMS: StarSystemConfig[] = [
   // ==========================================================================
@@ -1048,12 +1050,14 @@ export const PRIME_GALAXY_STAR_SYSTEMS: StarSystemConfig[] = [
 export function getStarSystemById(systemId: string): StarSystemConfig | undefined {
   return (
     PRIME_GALAXY_STAR_SYSTEMS.find((sys) => sys.id === systemId) ??
-    getIC1579StarSystemById(systemId)
+    getIC1579StarSystemById(systemId) ??
+    (systemId === AQUILA_TYPE2_SYSTEM.id ? AQUILA_TYPE2_SYSTEM : undefined)
   );
 }
 
 export function getStarSystemsForGalaxy(galaxyId: string): StarSystemConfig[] {
   if (galaxyId === 'galaxy01') return PRIME_GALAXY_STAR_SYSTEMS;
   if (galaxyId === 'galaxy17') return IC1579_STAR_SYSTEMS;
+  if (galaxyId === AQUILA_GALAXY_ID) return [AQUILA_TYPE2_SYSTEM];
   return [];
 }

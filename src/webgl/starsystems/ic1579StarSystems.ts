@@ -1,14 +1,17 @@
 import type { StarSystemConfig } from '../../types/starSystem';
+import { AERTHELGARD_SYSTEM } from './aerthelgardSystem';
 
 // ============================================================================
 // IC 1579 — EMERALD DEEP-SPIRAL STAR SYSTEM CATALOG
-// The special galaxy's handcrafted population: 11 discoverable systems,
+// The special galaxy's handcrafted population: 12 discoverable systems,
 // including the Dyson swarm, the tesseract-projection world, the flagship
-// ringed oceanic planet, systems riding the galactic core's shadow, and the
-// GREEN STAR — the emerald sun of the GEMINI home system.
+// ringed oceanic planet, systems riding the galactic core's shadow, the
+// GREEN STAR — the emerald sun of the GEMINI home system — and AERTHELGARD,
+// the living Type-I core world with its golden irregular moon.
 //
 // Visual identity: dark emerald, forest green, cyan-green, deep teal,
 // blue-green, subtle violet, black. Avoid generic purple/pink palettes.
+// Aerthelgard adds warm gold as the civilization accent of the core region.
 // ============================================================================
 
 export const IC1579_STAR_SYSTEMS: StarSystemConfig[] = [
@@ -1648,6 +1651,14 @@ export const IC1579_STAR_SYSTEMS: StarSystemConfig[] = [
     },
   ],
 },
+
+// ============================================================================
+// SYSTEM 12 — AERTHELGARD (SIRAN CORE SYSTEM)
+// The living Type-I world of the Siran Galaxy, riding close to the galactic
+// core. Its night sky is dominated by the supermassive black hole, and its
+// irregular golden moon Auriel rules the phases above New Hospet.
+// ============================================================================
+AERTHELGARD_SYSTEM,
 ];
 
 export const GREEN_STAR_SYSTEM_ID = 'ic1579-greenstar';

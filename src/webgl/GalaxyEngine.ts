@@ -12,10 +12,19 @@ import { PostProcessingPipeline } from './PostProcessing';
 import { SurfaceExperience } from './starsystems/surface/SurfaceExperience';
 import { GeminiCivilization } from './starsystems/surface/GeminiCivilization';
 import type { CivilInteractable } from './starsystems/surface/GeminiCivilization';
-import { GEMINI_CITY_DIRS, EMERIA_CITY_INDEX } from './starsystems/surface/cityDirs';
+import { getCapitalCityDir } from './starsystems/surface/cityDirs';
 import { getQualityConfigForTier, effectivePixelRatio } from './utils/deviceDetection';
 import type { GalaxyPreset, InteractionState, QualityTier, SimulationStats } from '../types/simulation';
 import type { NavigationMode, UniverseState, ScaleLevel } from '../types/universe';
+import type { ExternalWorldState, WorldArrivalMode, WorldArrivalState, WorldReturnState } from '../types/world';
+import { IDLE_EXTERNAL_WORLD_STATE } from '../types/world';
+import {
+  AQUILA_GALAXY_ID,
+  getWorldManifestByManifestId,
+  getWorldManifestByWorldId,
+  isArrivalModeSupported,
+  logWorldRegistryStatus,
+} from '../worlds/worldRegistry';
 import { soundSynthesizer } from '../components/SoundSynthesizer';
 
 export class GalaxyEngine {
@@ -158,6 +167,16 @@ export class GalaxyEngine {
   private surfaceWalkSpeed = 0; // scene units / s (0 → legacy planet walk)
   private interactionTarget: CivilInteractable | null = null;
   private dialogueActive = false;
+
+  // AQUILA — external Type-II world handoff state machine. The Galaxy
+  // Explorer owns everything down to orbit; the external world owns the
+  // surface. This state tracks the transition between the two.
+  private externalWorldState: ExternalWorldState = { ...IDLE_EXTERNAL_WORLD_STATE };
+  private externalWorldExitContext: {
+    pos: THREE.Vector3;
+    look: THREE.Vector3;
+    saved: boolean;
+  } = { pos: new THREE.Vector3(), look: new THREE.Vector3(), saved: false };
   private dialogueIndex = 0;
   private dialogueLines: string[] = [];
   private dialogueTargetId: string | null = null;
@@ -351,6 +370,9 @@ export class GalaxyEngine {
     // 10. Start Animation Loop
     this.animate = this.animate.bind(this);
     this.animate();
+
+    // Dev-only diagnostics — world registry contract health (Phase 24).
+    logWorldRegistryStatus();
   }
 
   /** Push one effective pixel ratio to every render consumer (renderer,
@@ -535,6 +557,7 @@ export class GalaxyEngine {
               }
             : null,
         activeDiscoveryTag: this.getActiveDiscoveryTag(),
+        externalWorldState: { ...this.externalWorldState },
       });
 
       const navMode = this.computeNavigationMode();
@@ -583,14 +606,23 @@ export class GalaxyEngine {
   }
 
   /**
-   * AETHER ↔ IC 1579 navigation state.
+   * AETHER ↔ IC 1579 ↔ AQUILA navigation state.
    * AETHER = the cosmic overview between destinations.
-   * IC 1579 = the destination galaxy, with explicit depth states
-   * (approach → object view → stellar interior → systems → worlds → surface).
+   * IC 1579 = the deep-exploration destination galaxy.
+   * AQUILA = the external Type-II destination galaxy (world gateway).
    */
   public computeNavigationMode(): NavigationMode {
     if (this.activeCosmicObjectId) return 'COSMIC_DESTINATION';
     if (this.isOnSurface) return 'IC1579_SURFACE';
+
+    if (this.activeGalaxyId === AQUILA_GALAXY_ID) {
+      // AQUILA — the external Type-II destination galaxy. Depth states are
+      // its own: galaxy interior → Type-II system → Type-II planet orbit.
+      if (this.activeMoonId || this.activePlanetId) return 'AQUILA_PLANET';
+      if (this.activeSystemId) return 'AQUILA_SYSTEM';
+      return 'AQUILA_GALAXY';
+    }
+
     if (this.activeMoonId || this.activePlanetId) return 'IC1579_PLANET';
     if (this.activeSystemId) return 'IC1579_SYSTEM';
 
@@ -681,6 +713,7 @@ export class GalaxyEngine {
    */
   public navigateToGalaxy(galaxyId: string) {
     if (this.isOnSurface) this.exitSurface();
+    this.abortActiveHandoff();
 
     const targetGalaxy = this.galaxies.get(galaxyId);
     if (!targetGalaxy || (this.activeGalaxyId === galaxyId && !this.isInspectingCore && !this.isTransitioningCamera && !this.activeSystemId)) {
@@ -761,6 +794,7 @@ export class GalaxyEngine {
    */
   public enterStarSystem(systemId: string) {
     if (this.isOnSurface) this.exitSurface();
+    this.abortActiveHandoff();
 
     const galaxy = this.getActiveGalaxy();
     if (!galaxy || !galaxy.starSystems) {
@@ -813,6 +847,7 @@ export class GalaxyEngine {
    */
   public enterPlanet(systemId: string, planetId: string) {
     if (this.isOnSurface) this.exitSurface();
+    this.abortActiveHandoff();
 
     const galaxy = this.getActiveGalaxy();
     if (!galaxy || !galaxy.starSystems) {
@@ -949,6 +984,7 @@ export class GalaxyEngine {
    */
   public enterCosmicObject(objectId: string) {
     if (this.isOnSurface) this.exitSurface();
+    this.abortActiveHandoff();
 
     const obj = this.cosmicObjects.getObject(objectId);
     if (!obj) {
@@ -1151,7 +1187,7 @@ export class GalaxyEngine {
     if (landDir.lengthSq() < 0.0001) landDir.set(0, 0.25, 1);
     landDir.normalize();
     if (this.surfaceCivilization) {
-      landDir.copy(GEMINI_CITY_DIRS[EMERIA_CITY_INDEX]).transformDirection(planet.axialGroup.matrixWorld);
+      landDir.copy(getCapitalCityDir(planet.config)).transformDirection(planet.axialGroup.matrixWorld);
     }
     const targetPos = planetPos.clone().addScaledVector(landDir, planet.config.radius * 1.12);
     this.startCameraTransition(targetPos, planetPos, 3.4);
@@ -1215,6 +1251,217 @@ export class GalaxyEngine {
     const targetPos = planetWorldPos.clone().add(this.planetCamOffset);
     this.startCameraTransition(targetPos, planetWorldPos, 1.6);
     this.emitUniverseState();
+  }
+
+  // ------------------------------------------------------------------
+  // AQUILA — EXTERNAL WORLD HANDOFF
+  //
+  // The world boundary: the Galaxy Explorer owns orbital/astronomical
+  // scale. When the player enters New Hospet, the player is handed off
+  // to the external Type-II world with a full arrival state. The return
+  // journey hands the player back to orbit above TYPE2-PLANET-001.
+  // ------------------------------------------------------------------
+
+  private setExternalWorldState(patch: Partial<ExternalWorldState>) {
+    this.externalWorldState = { ...this.externalWorldState, ...patch };
+    this.emitUniverseState();
+  }
+
+  private resetExternalWorldState() {
+    this.externalWorldState = { ...IDLE_EXTERNAL_WORLD_STATE };
+    this.externalWorldExitContext.saved = false;
+  }
+
+  /**
+   * Player selected ENTER NEW HOSPET at the destination boundary.
+   * Validates the manifest + current astronomical context, saves the
+   * orbit position (for the return journey) and enters the preparing
+   * phase. The HUD renders the cinematic transition overlay.
+   */
+  public beginWorldHandoff(worldId: string, arrivalMode: WorldArrivalMode = 'orbit') {
+    if (this.isOnSurface) this.exitSurface();
+
+    const manifest = getWorldManifestByWorldId(worldId);
+    if (!manifest) {
+      console.error('[WORLD HANDOFF] unknown world id', worldId);
+      this.setExternalWorldState({
+        status: 'error',
+        worldId,
+        manifestId: null,
+        arrivalMode: null,
+        message: 'Destination metadata is missing. (Configuration error.)',
+      });
+      return;
+    }
+
+    if (!isArrivalModeSupported(manifest, arrivalMode)) {
+      this.setExternalWorldState({
+        status: 'error',
+        worldId: manifest.worldId,
+        manifestId: manifest.manifestId,
+        arrivalMode,
+        message: `${manifest.displayName} does not support ${arrivalMode.toUpperCase()} arrival.`,
+      });
+      return;
+    }
+
+    // The player must be at the destination boundary: orbiting the planet
+    // of the manifest inside the manifest's galaxy/system.
+    const atBoundary =
+      this.activeGalaxyId === manifest.galaxyId &&
+      this.activeSystemId === manifest.starSystemId &&
+      this.activePlanetId === manifest.planetId;
+
+    if (!atBoundary) {
+      this.setExternalWorldState({
+        status: 'error',
+        worldId: manifest.worldId,
+        manifestId: manifest.manifestId,
+        arrivalMode,
+        message: 'Destination out of range — approach the planet first.',
+      });
+      return;
+    }
+
+    // Remember the orbit so the return journey restores the player to the
+    // exact astronomical location from which they entered.
+    if (!this.externalWorldExitContext.saved) {
+      this.externalWorldExitContext.pos.copy(this.camera.position);
+      this.externalWorldExitContext.look.copy(this.controls.target);
+      this.externalWorldExitContext.saved = true;
+    }
+
+    this.setState('CORE_TRANSITION');
+    this.setExternalWorldState({
+      status: 'preparing',
+      worldId: manifest.worldId,
+      manifestId: manifest.manifestId,
+      arrivalMode,
+    });
+  }
+
+  /**
+   * Full arrival state handed to the external world — WHO arrived, FROM
+   * WHERE, IN WHAT STATE, HOW THEY SHOULD ARRIVE.
+   */
+  public getWorldArrivalState(): WorldArrivalState | null {
+    const manifest =
+      (this.externalWorldState.manifestId && getWorldManifestByWorldId(this.externalWorldState.worldId ?? '')) ?? null;
+    if (!manifest || !this.externalWorldState.arrivalMode) return null;
+
+    const pos = this.camera.position;
+    const look = this.controls.target;
+
+    return {
+      worldId: manifest.worldId,
+      manifestId: manifest.manifestId,
+      galaxyId: manifest.galaxyId,
+      starSystemId: manifest.starSystemId,
+      planetId: manifest.planetId,
+      arrivalMode: this.externalWorldState.arrivalMode,
+      spacecraftState: {
+        position: [pos.x, pos.y, pos.z],
+        lookAt: [look.x, look.y, look.z],
+        speed: this.timeScale,
+      },
+      playerState: {
+        position: [pos.x, pos.y, pos.z],
+        rotation: [this.camera.rotation.x, this.camera.rotation.y, this.camera.rotation.z],
+      },
+      universeTime: this.accumulatedSimulationTime,
+      sourceWorld: 'GALAXY_EXPLORER',
+      returnTarget: manifest.returnTarget,
+      returnUrl: typeof window !== 'undefined' ? window.location.origin + window.location.pathname : '',
+    };
+  }
+
+  /** Called by the UI once the external world tab was opened successfully. */
+  public confirmWorldHandoff() {
+    this.setExternalWorldState({ status: 'entered' });
+  }
+
+  /** User chose to stay / the world could not be launched. */
+  public cancelWorldHandoff() {
+    if (this.externalWorldState.status === 'idle') return;
+    this.resetExternalWorldState();
+    this.setState('EXPLORING');
+    this.emitUniverseState();
+  }
+
+  /** External world endpoint missing or launch failed — never crash. */
+  public setWorldHandoffError(message: string) {
+    this.setExternalWorldState({
+      status: 'error',
+      message,
+    });
+  }
+
+  /**
+   * RETURN JOURNEY — the external world posts a return state back to the
+   * Galaxy Explorer (window.opener.postMessage). The player is restored to
+   * orbit above TYPE2-PLANET-001 inside AQUILA-TYPE2-SYSTEM.
+   */
+  public restoreFromWorld(returnState: WorldReturnState) {
+    const manifest =
+      getWorldManifestByWorldId(returnState.worldId) ??
+      (returnState.manifestId ? getWorldManifestByManifestId(returnState.manifestId) : undefined);
+
+    if (!manifest) {
+      console.warn('[WORLD HANDOFF] return from unknown world ignored', returnState);
+      return;
+    }
+
+    if (this.isOnSurface) this.exitSurface();
+
+    this.activeGalaxyId = manifest.galaxyId;
+    this.activeSystemId = manifest.starSystemId;
+    this.activePlanetId = manifest.planetId;
+    this.activeMoonId = null;
+    this.detectedSystemId = null;
+    this.detectedSystemName = null;
+    this.detectedPlanetId = null;
+    this.detectedPlanetName = null;
+    this.activeCosmicObjectId = null;
+    this.detectedCosmicObjectId = null;
+    this.detectedCosmicObjectName = null;
+    this.isInspectingCore = false;
+    this.targetCoreInspection = 0.0;
+    this.ic1579ApproachActive = false;
+    this.camTransitionQueue = [];
+    this.updateControlsScale();
+    this.setState('CORE_TRANSITION');
+
+    // Restore to the saved orbit, or fall back to a fresh orbit framing
+    // of the Type-II planet.
+    if (this.externalWorldExitContext.saved) {
+      this.startCameraTransition(
+        this.externalWorldExitContext.pos,
+        this.externalWorldExitContext.look,
+        2.2
+      );
+    } else {
+      const galaxy = this.getActiveGalaxy();
+      const sys = galaxy?.starSystems?.getSystem(manifest.starSystemId);
+      const planetPos = sys?.getPlanetPositionWorld(manifest.planetId);
+      const fallbackPos = planetPos ? planetPos.clone().add(this.planetCamOffset) : new THREE.Vector3(0, 30, 60);
+      const fallbackLook = planetPos ?? new THREE.Vector3();
+      this.startCameraTransition(fallbackPos, fallbackLook, 2.2);
+    }
+    this.externalWorldExitContext.saved = false;
+
+    this.setExternalWorldState({
+      status: 'returning',
+      worldId: manifest.worldId,
+      manifestId: manifest.manifestId,
+      arrivalMode: returnState.arrivalMode ?? 'orbit',
+    });
+  }
+
+  /** Called by the engine when the player navigates away mid-handoff. */
+  private abortActiveHandoff() {
+    if (this.externalWorldState.status !== 'idle' && this.externalWorldState.status !== 'returning') {
+      this.resetExternalWorldState();
+    }
   }
 
   private initEventListeners() {
@@ -1585,7 +1832,9 @@ export class GalaxyEngine {
     }
 
     if (e.key === 'Escape') {
-      if (this.isOnSurface && this.dialogueActive) {
+      if (this.externalWorldState.status === 'preparing' || this.externalWorldState.status === 'launching' || this.externalWorldState.status === 'error') {
+        this.cancelWorldHandoff();
+      } else if (this.isOnSurface && this.dialogueActive) {
         this.closeDialogue();
       } else if (this.isOnSurface) {
         this.exitSurface();
@@ -1785,6 +2034,12 @@ export class GalaxyEngine {
           ) {
             this.activeGalaxyId = 'galaxy01';
             this.updateControlsScale();
+          }
+
+          // WORLD RETURN — the spacecraft settled back in orbit above the
+          // Type-II planet; the handoff overlay resolves to the live HUD.
+          if (this.externalWorldState.status === 'returning') {
+            this.resetExternalWorldState();
           }
 
           this.setState(this.isInspectingCore ? 'CORE_INSPECTION' : 'EXPLORING');
@@ -2098,6 +2353,7 @@ export class GalaxyEngine {
     }
 
     // 10b. Proximity Detection for Habitable Worlds inside the active system
+    // (surface-explorable worlds AND external-world destination planets)
     if (this.activeSystemId && !this.activePlanetId && !this.isOnSurface && !this.isTransitioningCamera) {
       const proxGalaxy = this.getActiveGalaxy();
       const proxSys = proxGalaxy?.starSystems?.getSystem(this.activeSystemId);
@@ -2107,7 +2363,7 @@ export class GalaxyEngine {
         let closestDist = Infinity;
         const pPos = new THREE.Vector3();
         for (const planet of proxSys.planets) {
-          if (!planet.config.surfaceExplore) continue;
+          if (!planet.config.surfaceExplore && !planet.config.externalWorldId) continue;
           planet.group.getWorldPosition(pPos);
           const dist = this.camera.position.distanceTo(pPos);
           const detectRadius = Math.max(planet.config.radius * 18.0, 0.7);

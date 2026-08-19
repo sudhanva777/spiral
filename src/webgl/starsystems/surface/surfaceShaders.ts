@@ -260,12 +260,13 @@ uniform float uMoonRadii[3];
 uniform vec4 uSatNormals[4];   // xyz normal, w speed
 uniform float uSatPhases[4];
 uniform float uSunSize;
-uniform float uCityCivil;      // 1 = GEMINI civilization below
+uniform float uCityCivil;      // 1 = civilization below
 uniform vec3 uCityDirs[5];     // city dirs, surface-local space
 uniform vec3 uCityCol;         // city glow tint
 uniform vec3 uCityShadow;      // skyline silhouette colour
 uniform vec3 uCamPosSky;       // camera position in surface-local space
 uniform float uPlanetR;        // planet radius in scene units
+uniform float uGalaxyCoreDist; // distance to IC 1579 core (galaxy-local units)
 
 varying vec3 vDir;
 
@@ -321,14 +322,18 @@ void main() {
   col += mix(uGalaxyDustCol, uGalaxyBandCol, lanes) * bandCol * 1.15;
 
   // Galactic core glow toward the center of IC 1579
+  // The core looms larger and brighter the closer the planet rides to the
+  // galactic center — from Aerthelgard the black hole dominates the night
+  // sky; from the outer systems it recedes to a bright knot.
+  float coreScale = clamp(42.0 / (uGalaxyCoreDist + 16.0), 0.8, 3.2);
   float coreAng = acos(clamp(dot(d, uGalaxyCenterDir), -1.0, 1.0));
-  float core = gaussian(coreAng, 0.16) * (0.4 + 0.6 * night);
-  col += mix(uCoreCol, uGalaxyBandCol, 0.35) * core * 0.85;
+  float core = gaussian(coreAng, 0.16 * coreScale) * (0.4 + 0.6 * night);
+  col += mix(uCoreCol, uGalaxyBandCol, 0.35) * core * 0.85 * coreScale;
   // Supermassive black hole: dark heart + photon-ring-inspired rim
-  float bhDisc = smoothstep(0.028, 0.012, coreAng);
-  float bhRim = gaussian(coreAng, 0.02);
+  float bhDisc = smoothstep(0.028 * coreScale, 0.012 * coreScale, coreAng);
+  float bhRim = gaussian(coreAng, 0.02 * coreScale);
   col *= 1.0 - bhDisc * 0.9 * (0.5 + 0.5 * night);
-  col += uCoreCol * bhRim * 0.9 * (0.3 + 0.7 * night);
+  col += uCoreCol * bhRim * 0.9 * (0.3 + 0.7 * night) * coreScale;
 
   // --- Rings (analytical annulus crossing the sky) ---
   // The ring plane passes through the planet center with normal uRingNormal.
@@ -362,12 +367,17 @@ void main() {
     col += ringCol * ringBand * uRingOpacity * ringDay;
   }
 
-  // --- Moons ---
+  // --- Moons (phase-lit: the terminator tracks the sun-moon geometry) ---
   for (int i = 0; i < 3; i++) {
-    float moonAng = acos(clamp(dot(d, normalize(uMoonDirs[i] + 1e-6)), -1.0, 1.0));
+    vec3 moonD = normalize(uMoonDirs[i] + 1e-6);
+    float moonAng = acos(clamp(dot(d, moonD), -1.0, 1.0));
     float moonDisc = smoothstep(uMoonRadii[i], uMoonRadii[i] * 0.7, moonAng);
-    col += uMoonColors[i] * moonDisc * 0.95;
-    col += uMoonColors[i] * gaussian(moonAng, uMoonRadii[i] * 2.2) * 0.3;
+    float phase = clamp(dot(moonD, uSunDir), -1.0, 1.0);
+    float litFrac = (1.0 + phase) * 0.5;
+    float litSide = smoothstep(0.0, 0.1, dot(d, uSunDir) - phase);
+    float shade = mix(litSide, 1.0, smoothstep(0.6, 1.0, litFrac)) * (0.15 + 0.85 * litFrac);
+    col += uMoonColors[i] * moonDisc * shade * 0.95;
+    col += uMoonColors[i] * gaussian(moonAng, uMoonRadii[i] * 2.2) * 0.3 * (0.35 + 0.65 * litFrac);
   }
 
   // --- Orbital traffic: occasional moving glints (stations/satellites) ---

@@ -1004,9 +1004,9 @@ export const GALAXY_16_CONFIG: GalaxyConfig = {
 // ============================================================================
 export const IC1579_CONFIG: GalaxyConfig = {
   id: 'galaxy17',
-  name: 'IC 1579',
-  subtitle: 'Emerald Deep-Spiral • Living Ecosystem',
-  description: 'An ancient emerald spiral galaxy harboring a supermassive black hole, a Dyson swarm megastructure, a tesseract-projection world, and a flagship ringed oceanic planet. The only galaxy in the cosmos where deep exploration reaches from galactic core to planetary surface and back to the night sky.',
+  name: 'Siran Galaxy',
+  subtitle: 'IC 1579 • Emerald Deep-Spiral • Living Ecosystem',
+  description: 'An ancient emerald spiral galaxy harboring a supermassive black hole, a Dyson swarm megastructure, a tesseract-projection world, and a flagship ringed oceanic planet. At its emerald heart lies Aerthelgard — a living Type-I world beneath an irregular golden moon, its capital New Hospet watching the black hole cross the night sky. The only galaxy in the cosmos where deep exploration reaches from galactic core to planetary surface and back to the night sky.',
   type: 'ic1579-emerald-spiral',
   groupId: 'groupE',
   position: [-285, 38, -165],
@@ -1065,6 +1065,59 @@ export const IC1579_CONFIG: GalaxyConfig = {
     spiralTightness: 3.6,
     darkLaneStrength: 0.8,
     voidStrength: 0.4,
+  },
+};
+
+// ============================================================================
+// AQUILA — THE TYPE-II DESTINATION GALAXY
+//
+// A bright barred spiral holding the Type-II star system and the external
+// Type-II civilization world of New Hospet. Astronomical position is
+// configured HERE and nowhere else. The detailed world lives outside the
+// Galaxy Explorer; this galaxy is its astronomical gateway.
+// ============================================================================
+export const AQUILA_CONFIG: GalaxyConfig = {
+  id: 'AQUILA',
+  name: 'Aquila',
+  subtitle: 'Type-II Gateway Galaxy',
+  description:
+    'A bright golden-white barred spiral isolated in the far quadrant of the universe. Its single inhabited star system hosts TYPE2-PLANET-001 — the astronomical anchor of New Hospet, a Type-II civilization megacity whose detailed world exists beyond the Galaxy Explorer.',
+  type: 'barred-spiral',
+  groupId: 'groupB',
+  position: [330, 18, 300],
+  rotation: [0.1, 0.05, -0.08],
+  scale: 1.0,
+  speed: 0.24,
+  turbulence: 0.7,
+  boundingRadius: 46.0,
+  hasBlackHole: false,
+  specialEffect: null,
+  palette: {
+    core: '#FFFDF4',
+    coreHalo: '#FFE9C4',
+    inner: '#FFD27E',
+    deep: '#C98A3D',
+    armsPrimary: '#F2C14E',
+    armsSecondary: '#A86E2E',
+    armsTertiary: '#5E3A16',
+    dust: '#3A2410',
+    dustSecondary: '#5E4620',
+    starFormation: '#FFE9B8',
+    starFormationWarm: '#FFF6DC',
+    ambientStars: ['#FFFDF4', '#FFE9C4', '#FFD27E', '#F2C14E'],
+  },
+  morphology: {
+    type: 'barred-spiral',
+    armCount: 2,
+    asymmetry: 0.15,
+    barStrength: 0.7,
+    ringStrength: 0.0,
+    diskFlattening: 0.6,
+    coreDensity: 1.05,
+    dustDensity: 0.9,
+    verticalThickness: 1.1,
+    starFormationDensity: 1.0,
+    spiralTightness: 3.3,
   },
 };
 
@@ -1132,6 +1185,7 @@ export const UNIVERSE_GALAXIES: GalaxyConfig[] = [
   GALAXY_15_CONFIG,
   GALAXY_16_CONFIG,
   IC1579_CONFIG,
+  AQUILA_CONFIG,
 ];
 
 export function getGalaxyConfigById(id: string): GalaxyConfig {

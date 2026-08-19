@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NEW HOSPET // TYPE-II CIVILIZATION — World Stub</title>
+<style>
+  :root {
+    --bg: #02060f;
+    --panel: rgba(15, 23, 42, 0.88);
+    --gold: #fbbf24;
+    --gold-dim: #d97706;
+    --teal: #7fe8d8;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --rose: #fb7185;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .stars { position: fixed; inset: 0; background-image:
+    radial-gradient(1px 1px at 20% 30%, #fff, transparent),
+    radial-gradient(1px 1px at 70% 20%, #ffe9c4, transparent),
+    radial-gradient(1.5px 1.5px at 40% 70%, #fff, transparent),
+    radial-gradient(1px 1px at 85% 60%, #ffd27e, transparent),
+    radial-gradient(1px 1px at 10% 85%, #fff, transparent);
+    opacity: 0.7; pointer-events: none; }
+  .card {
+    position: relative;
+    width: min(26rem, calc(100vw - 2rem));
+    background: var(--panel);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    border-radius: 14px;
+    padding: 1.6rem 1.7rem;
+    box-shadow: 0 0 40px rgba(245, 158, 11, 0.22);
+    text-align: center;
+  }
+  .badge { font-size: 0.62rem; letter-spacing: 0.3em; color: var(--gold); font-weight: 700; }
+  .title { font-size: 1.35rem; font-weight: 800; letter-spacing: 0.18em; color: var(--gold); margin: 0.4rem 0 0.2rem; }
+  .subtitle { font-family: 'Consolas', 'JetBrains Mono', monospace; font-size: 0.72rem; letter-spacing: 0.16em; color: var(--text); }
+  .status-line { font-family: 'Consolas', monospace; font-size: 0.68rem; letter-spacing: 0.1em; color: var(--muted); margin-top: 1.1rem; min-height: 1.1rem; }
+  .progress { width: 100%; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; margin-top: 0.6rem; }
+  .progress span { display: block; height: 100%; width: 40%; background: linear-gradient(90deg, var(--gold-dim), var(--gold), var(--teal)); animation: scan 1.3s ease-in-out infinite; border-radius: 999px; }
+  @keyframes scan { 0% { transform: translateX(-110%); } 100% { transform: translateX(300%); } }
+  .divider { height: 1px; background: linear-gradient(90deg, rgba(245,158,11,0.5), transparent); margin: 1rem 0; }
+  .info { display: flex; justify-content: space-between; font-family: 'Consolas', monospace; font-size: 0.68rem; margin: 0.35rem 0; }
+  .info .k { color: var(--muted); letter-spacing: 0.12em; }
+  .info .v { color: var(--text); letter-spacing: 0.06em; }
+  .info .v.gold { color: var(--gold); }
+  .return-btn {
+    margin-top: 1.2rem;
+    width: 100%;
+    background: linear-gradient(135deg, var(--gold-dim), var(--gold));
+    border: none; color: #fff; font-weight: 700; letter-spacing: 0.12em; font-size: 0.75rem;
+    padding: 0.6rem 1rem; border-radius: 8px; cursor: pointer;
+    box-shadow: 0 0 14px rgba(245, 158, 11, 0.4);
+  }
+  .return-btn:hover { filter: brightness(1.12); }
+  .return-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .error { color: var(--rose); font-family: 'Consolas', monospace; font-size: 0.72rem; letter-spacing: 0.08em; margin-top: 0.9rem; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="stars"></div>
+<div class="card" id="card">
+  <div class="badge">AQUILA // AQUILA-TYPE2-SYSTEM // TYPE2-PLANET-001</div>
+  <div class="title">NEW HOSPET</div>
+  <div class="subtitle">TYPE-II CIVILIZATION // PLANETARY MEGACITY</div>
+  <div class="status-line" id="status">WORLD INITIALIZING...</div>
+  <div class="progress"><span></span></div>
+
+  <div id="arrival" class="hidden">
+    <div class="divider"></div>
+    <div class="info"><span class="k">WORLD ID</span><span class="v gold" id="f-world">—</span></div>
+    <div class="info"><span class="k">MANIFEST</span><span class="v" id="f-manifest">—</span></div>
+    <div class="info"><span class="k">SOURCE</span><span class="v" id="f-source">—</span></div>
+    <div class="info"><span class="k">ARRIVAL</span><span class="v gold" id="f-arrival">—</span></div>
+    <div class="info"><span class="k">UNIVERSE TIME</span><span class="v" id="f-time">—</span></div>
+    <button class="return-btn" id="return-btn">RETURN TO GALAXY EXPLORER</button>
+    <div class="error hidden" id="error"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var params = new URLSearchParams(window.location.search);
+  var worldId = params.get('world') || '';
+  var manifestId = params.get('manifest') || '';
+  var galaxyId = params.get('galaxy') || '';
+  var systemId = params.get('system') || '';
+  var planetId = params.get('planet') || '';
+  var arrivalMode = params.get('arrival') || 'orbit';
+  var source = params.get('source') || 'GALAXY_EXPLORER';
+  var returnTo = params.get('returnTo') || 'GALAXY_EXPLORER';
+  var universeTime = params.get('universeTime') || '—';
+  var returnUrl = params.get('returnUrl') || '';
+
+  var card = document.getElementById('card');
+  var statusEl = document.getElementById('status');
+  var arrival = document.getElementById('arrival');
+  var errorEl = document.getElementById('error');
+  var returnBtn = document.getElementById('return-btn');
+
+  var valid = worldId && galaxyId && systemId && planetId;
+
+  function showArrivalInfo() {
+    document.getElementById('f-world').textContent = worldId;
+    document.getElementById('f-manifest').textContent = manifestId || '—';
+    document.getElementById('f-source').textContent = source;
+    document.getElementById('f-arrival').textContent = arrivalMode.toUpperCase();
+    document.getElementById('f-time').textContent = universeTime;
+  }
+
+  function postReturn() {
+    var msg = {
+      type: 'universe-world-return',
+      worldId: worldId,
+      manifestId: manifestId,
+      arrivalMode: arrivalMode,
+      galaxyId: galaxyId,
+      starSystemId: systemId,
+      planetId: planetId
+    };
+    // Preferred: the Galaxy Explorer tab is still open and listening.
+    if (window.opener && !window.opener.closed) {
+      try {
+        window.opener.postMessage(msg, '*');
+        statusEl.textContent = 'RETURN SIGNAL SENT — RETURNING TO ORBIT';
+        returnBtn.disabled = true;
+        setTimeout(function () { window.close(); }, 600);
+        return;
+      } catch (e) { /* fall through to URL navigation */ }
+    }
+    // Fallback: navigate back to the Galaxy Explorer with return state.
+    var sep = (returnUrl.indexOf('?') >= 0) ? '&' : '?';
+    var target = returnUrl + sep + 'universeWorldReturn=' + encodeURIComponent(JSON.stringify(msg));
+    window.location.href = target;
+  }
+
+  returnBtn.addEventListener('click', postReturn);
+
+  if (!valid) {
+    statusEl.textContent = 'CONNECTION ERROR — NO ARRIVAL STATE';
+    arrival.classList.remove('hidden');
+    showArrivalInfo();
+    returnBtn.textContent = 'OPEN GALAXY EXPLORER';
+    returnBtn.onclick = function () { window.location.href = returnUrl || '/'; };
+    errorEl.textContent = 'OPENED DIRECTLY WITHOUT A GALAXY EXPLORER HANDOFF.';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  // Simulated world boot — proves the handoff experience end to end.
+  showArrivalInfo();
+  setTimeout(function () {
+    statusEl.textContent = 'WORLD ACTIVE — PLAYER ARRIVED AT ' + arrivalMode.toUpperCase();
+    arrival.classList.remove('hidden');
+  }, 2400);
+})();
+</script>
+</body>
+</html>

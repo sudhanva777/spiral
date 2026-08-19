@@ -5,8 +5,7 @@ import { BlackHoleSystem } from './effects/BlackHoleSystem';
 import { StarSystemManager } from '../starsystems/StarSystemManager';
 import type { GalaxyConfig } from '../../types/universe';
 import type { GalaxyPreset } from '../../types/simulation';
-import { PRIME_GALAXY_STAR_SYSTEMS } from '../starsystems/starSystemRegistry';
-import { IC1579_STAR_SYSTEMS } from '../starsystems/ic1579StarSystems';
+import { getStarSystemsForGalaxy } from '../starsystems/starSystemRegistry';
 
 function getParticleCountForGalaxy(config: GalaxyConfig, totalUniverseParticles: number): number {
   switch (config.id) {
@@ -79,12 +78,12 @@ export class GalaxyInstance {
       this.group.add(this.energyJets.points);
     }
 
-    // Hierarchical Planetary Star Systems (Phase 1: Galaxy 01 / Prime Galaxy, Phase 2: IC 1579)
-    if (config.id === 'galaxy01') {
-      this.starSystems = new StarSystemManager(PRIME_GALAXY_STAR_SYSTEMS);
-      this.group.add(this.starSystems.group);
-    } else if (config.id === 'galaxy17') {
-      this.starSystems = new StarSystemManager(IC1579_STAR_SYSTEMS);
+    // Hierarchical Planetary Star Systems — attached from the shared star
+    // system registry (single source of truth). Currently populated for
+    // galaxy01 (Prime), galaxy17 (IC 1579) and AQUILA (Type-II system).
+    const systemConfigs = getStarSystemsForGalaxy(config.id);
+    if (systemConfigs.length > 0) {
+      this.starSystems = new StarSystemManager(systemConfigs);
       this.group.add(this.starSystems.group);
     }
   }

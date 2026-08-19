@@ -4,7 +4,7 @@ import type { GalaxyConfig } from '../../../types/universe';
 import { MoonMesh } from '../MoonMesh';
 import { generateGalaxyParticles } from '../../utils/galaxyMath';
 import { IC1579_CONFIG } from '../../galaxies/registry';
-import { GEMINI_CITY_DIRS } from './cityDirs';
+import { getCityDirsForPlanet } from './cityDirs';
 import {
   surfaceTerrainVertexShader,
   surfaceTerrainFragmentShader,
@@ -376,9 +376,9 @@ export class SurfaceExperience {
         },
         uMoonColors: {
           value: [
-            new THREE.Color(0.7, 0.95, 0.85),
-            new THREE.Color(0.9, 0.98, 0.95),
-            new THREE.Color(0.5, 0.6, 0.55),
+            config.moons?.[0] ? new THREE.Color(config.moons[0].primaryColor) : new THREE.Color(0.7, 0.95, 0.85),
+            config.moons?.[1] ? new THREE.Color(config.moons[1].primaryColor) : new THREE.Color(0.9, 0.98, 0.95),
+            config.moons?.[2] ? new THREE.Color(config.moons[2].primaryColor) : new THREE.Color(0.5, 0.6, 0.55),
           ],
         },
         uMoonRadii: { value: [0.02, 0.014, 0.01] },
@@ -395,7 +395,7 @@ export class SurfaceExperience {
         uCityCivil: { value: config.surfaceCivilization ? 1 : 0 },
         uCityDirs: {
           value: config.surfaceCivilization
-            ? GEMINI_CITY_DIRS.map((d) => d.clone())
+            ? getCityDirsForPlanet(config).map((d) => d.clone())
             : [
                 new THREE.Vector3(0, 1, 0),
                 new THREE.Vector3(0, 1, 0),
@@ -404,10 +404,11 @@ export class SurfaceExperience {
                 new THREE.Vector3(0, 1, 0),
               ],
         },
-        uCityCol: { value: new THREE.Color(0.88, 1.0, 0.94) },
-        uCityShadow: { value: new THREE.Color(0.004, 0.011, 0.008) },
+        uCityCol: { value: new THREE.Color(config.cityTheme?.glow ?? '#E0FFEE') },
+        uCityShadow: { value: new THREE.Color(config.cityTheme?.shadow ?? '#01180E') },
         uCamPosSky: { value: new THREE.Vector3(0, R, 0) },
         uPlanetR: { value: R },
+        uGalaxyCoreDist: { value: 20 },
       },
     });
     this.skyDomeMesh = new THREE.Mesh(skyGeom, this.skyMaterial);
@@ -750,6 +751,9 @@ export class SurfaceExperience {
     if (this.galaxyRef) {
       this.galaxyRef.worldToLocal(planetPosGalaxy);
     }
+    // Distance to the IC 1579 core (galaxy-local units) — drives how large
+    // the black hole looms in the night sky (Aerthelgard rides close).
+    this.skyMaterial.uniforms.uGalaxyCoreDist.value = planetPosGalaxy.length();
 
     for (let i = 0; i < this.bandDirs.length / 3; i++) {
       const dx = this.bandDirs[i * 3] - planetPosGalaxy.x;

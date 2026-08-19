@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { PlanetConfig } from '../../../types/starSystem';
 
 // Canonical GEMINI city directions, expressed in planet model space
 // (axialGroup / axialTilt space — the same space the planet surface shader
@@ -13,3 +14,24 @@ export const GEMINI_CITY_DIRS: THREE.Vector3[] = [
 ];
 
 export const EMERIA_CITY_INDEX = 0;
+
+// ---------------------------------------------------------------------------
+// Config-driven city accessors. Planets may declare their own city directions
+// and capital index (AERTHELGARD: New Hospet); when omitted, the classic
+// GEMINI layout is used so every layer stays in sync from one source.
+// ---------------------------------------------------------------------------
+
+export function getCityDirsForPlanet(config: PlanetConfig): THREE.Vector3[] {
+  if (config.cityDirs && config.cityDirs.length > 0) {
+    return config.cityDirs.map((d) => new THREE.Vector3(d[0], d[1], d[2]).normalize());
+  }
+  return GEMINI_CITY_DIRS;
+}
+
+export function getCapitalCityIndex(config: PlanetConfig): number {
+  return config.cityCapitalIndex ?? EMERIA_CITY_INDEX;
+}
+
+export function getCapitalCityDir(config: PlanetConfig): THREE.Vector3 {
+  return getCityDirsForPlanet(config)[getCapitalCityIndex(config)];
+}

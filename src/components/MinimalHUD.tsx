@@ -24,10 +24,13 @@ import {
 } from 'lucide-react';
 import type { GalaxyPreset, InteractionState, QualityTier, SimulationStats } from '../types/simulation';
 import type { UniverseState } from '../types/universe';
+import type { WorldArrivalMode } from '../types/world';
 import { UNIVERSE_GALAXIES, getGalaxyConfigById } from '../webgl/galaxies/registry';
 import { getCosmicObjectById } from '../webgl/cosmic/cosmicObjectRegistry';
 import { PRIME_GALAXY_STAR_SYSTEMS, getStarSystemById, getStarSystemsForGalaxy } from '../webgl/starsystems/starSystemRegistry';
 import { GREEN_STAR_SYSTEM_ID, GEMINI_PLANET_ID } from '../webgl/starsystems/ic1579StarSystems';
+import { getWorldManifestByPlanetId } from '../worlds/worldRegistry';
+import { getType2WorldUrl } from '../worlds/worldConfig';
 import { soundSynthesizer } from './SoundSynthesizer';
 import { isTouchDevice } from '../webgl/utils/deviceDetection';
 import { TouchSurfaceControls } from './TouchSurfaceControls';
@@ -47,6 +50,7 @@ const DISCOVERY_TAG_LABEL: Record<string, { label: string; color: string }> = {
   sentinel: { label: 'SENTINEL // BLUE-WHITE GIANT', color: 'text-blue-300' },
   'halo-remnant': { label: 'HALO REMNANT', color: 'text-lime-300' },
   'core-vicinity': { label: 'BLACK HOLE VICINITY', color: 'text-emerald-200' },
+  aerthelgard: { label: 'AERTHELGARD // TYPE-I CORE WORLD', color: 'text-amber-300' },
 };
 
 const NAVIGATION_MODE_LABEL: Record<string, string> = {
@@ -57,7 +61,10 @@ const NAVIGATION_MODE_LABEL: Record<string, string> = {
   IC1579_STELLAR: 'IC 1579 // STELLAR INTERIOR',
   IC1579_SYSTEM: 'IC 1579 // STAR SYSTEM',
   IC1579_PLANET: 'IC 1579 // WORLD ORBIT',
-  IC1579_SURFACE: 'IC 1579 // SURFACE',
+  IC1579_SURFACE: 'SIRAN // SURFACE',
+  AQUILA_GALAXY: 'AQUILA // TYPE-II GATEWAY GALAXY',
+  AQUILA_SYSTEM: 'AQUILA // TYPE-II STAR SYSTEM',
+  AQUILA_PLANET: 'AQUILA // TYPE-II WORLD ORBIT',
 };
 
 function timeOfDayLabel(t: number): string {
@@ -174,6 +181,9 @@ interface MinimalHUDProps {
   onSurfaceStickInput?: (x: number, y: number) => void;
   onSurfaceJump?: () => void;
   onSurfaceInteract?: () => void;
+  // AQUILA — external Type-II world handoff
+  onEnterExternalWorld?: (worldId: string, arrivalMode: WorldArrivalMode) => void;
+  onCancelWorldHandoff?: () => void;
 }
 
 export const MinimalHUD: React.FC<MinimalHUDProps> = ({
@@ -203,6 +213,8 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
   onSurfaceStickInput,
   onSurfaceJump,
   onSurfaceInteract,
+  onEnterExternalWorld,
+  onCancelWorldHandoff,
 }) => {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -232,6 +244,14 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
 
   const isPrimeGalaxy = universeState.activeGalaxyId === 'galaxy01';
   const isIC1579 = universeState.activeGalaxyId === 'galaxy17';
+  const isAquila = universeState.activeGalaxyId === 'AQUILA';
+
+  // AQUILA — external Type-II world handoff state
+  const externalWorld = universeState.externalWorldState;
+  const activeExternalManifest = activePlanet?.externalWorldId
+    ? getWorldManifestByPlanetId(activePlanet.externalWorldId)
+    : undefined;
+  const externalWorldConnected = getType2WorldUrl() !== null;
   const showDetectedPrompt =
     universeState.detectedSystemId &&
     universeState.detectedSystemId !== dismissedPromptSystemId &&
@@ -310,7 +330,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
             <h1 className="brand-title">A E T H E R // D E E P &nbsp; S P A C E</h1>
             <span className="brand-sub">
               {isOnSurface
-                ? `AURELIA SURFACE • NIGHT SKY STREAMS FROM ${activeGalaxy.name.toUpperCase()}`
+                ? `${(activePlanet?.name ?? 'AURELIA').toUpperCase()} SURFACE • NIGHT SKY STREAMS FROM ${activeGalaxy.name.toUpperCase()}`
                 : activeMoon
                 ? `${activeMoon.name.toUpperCase()} • ${activeMoon.subtitle.toUpperCase()}`
                 : activePlanet
@@ -669,7 +689,8 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
         </div>
       )}
 
-      {/* Habitable World Proximity Prompt — approach a surface-explorable planet */}
+      {/* Habitable World Proximity Prompt — approach a surface-explorable planet
+          or an external Type-II destination planet */}
       {showDetectedPlanetPrompt && activeSystem && (
         <div className="star-system-prompt-banner pointer-events-auto animate-fade-in">
           <div className="prompt-content">
@@ -685,6 +706,14 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
                     </span>
                   )}
                 </>
+              ) : detectedPlanet.externalWorldId ? (
+                <>
+                  <span className="prompt-title text-amber-300">NEW HOSPET</span>
+                  <span className="prompt-sub">TYPE-II CIVILIZATION // PLANETARY MEGACITY</span>
+                  <span className="prompt-sub text-amber-200/80">
+                    EXTERNAL WORLD DETECTED — APPROACH FOR ORBIT & WORLD ENTRY
+                  </span>
+                </>
               ) : (
                 <>
                   <span className="prompt-title text-emerald-300">HABITABLE WORLD DETECTED</span>
@@ -696,10 +725,18 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
             </div>
             <div className="prompt-actions">
               <button
-                onClick={() => onEnterPlanetSurface && onEnterPlanetSurface(activeSystem.id, detectedPlanet.id)}
+                onClick={() =>
+                  detectedPlanet.externalWorldId
+                    ? onSelectPlanet && onSelectPlanet(activeSystem.id, detectedPlanet.id)
+                    : onEnterPlanetSurface && onEnterPlanetSurface(activeSystem.id, detectedPlanet.id)
+                }
                 className="prompt-btn-enter"
               >
-                {detectedPlanet.id === GEMINI_PLANET_ID ? 'ENTER GEMINI' : 'ENTER PLANET'}
+                {detectedPlanet.id === GEMINI_PLANET_ID
+                  ? 'ENTER GEMINI'
+                  : detectedPlanet.externalWorldId
+                  ? 'APPROACH NEW HOSPET'
+                  : 'ENTER PLANET'}
               </button>
             </div>
           </div>
@@ -747,6 +784,120 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
           <span className="discovery-label">CLASSIFIED // {activeSystem.name.toUpperCase()}</span>
           <span className="discovery-divider" />
           <span className="discovery-tag">{discoveryInfo.label}</span>
+        </div>
+      )}
+
+      {/* NEW HOSPET DESTINATION CARD — orbiting the external Type-II world */}
+      {activePlanet?.externalWorldId && activeExternalManifest && !isOnSurface && (
+        <div className="world-destination-card pointer-events-auto animate-fade-in">
+          <div className="world-destination-header">
+            <Sparkles className="w-5 h-5 text-amber-300 animate-pulse mr-2.5" />
+            <span className="world-destination-title">{activeExternalManifest.displayName.toUpperCase()}</span>
+          </div>
+          <div className="world-destination-subtitle">
+            {activeExternalManifest.civilizationLevel} CIVILIZATION // {activeExternalManifest.classification}
+          </div>
+          <div className="world-destination-divider" />
+          <div className="world-destination-row">
+            <span className="world-destination-label">DISTANCE</span>
+            <span className="world-destination-value">{universeState.distanceToActive ?? 0} AU</span>
+          </div>
+          <div className="world-destination-row">
+            <span className="world-destination-label">STATUS</span>
+            <span className={`world-destination-value ${externalWorldConnected ? 'text-emerald-300' : 'text-rose-300'}`}>
+              {externalWorldConnected ? 'READY' : 'NOT CONNECTED'}
+            </span>
+          </div>
+          <div className="world-destination-divider" />
+          <div className="world-destination-row">
+            <span className="world-destination-label">ENTRY</span>
+            <span className="world-destination-value">SPACECRAFT</span>
+          </div>
+          <div className="world-destination-row">
+            <span className="world-destination-label">WORLD</span>
+            <span className="world-destination-value">EXTERNAL // TYPE-II APPLICATION</span>
+          </div>
+          <div className="world-destination-actions">
+            <button
+              onClick={() =>
+                onEnterExternalWorld &&
+                onEnterExternalWorld(activeExternalManifest.worldId, 'orbit')
+              }
+              className="prompt-btn-enter world-entry-btn"
+              disabled={!externalWorldConnected}
+              title={externalWorldConnected ? 'Enter New Hospet — the Type-II world loads and the player arrives in orbit' : 'The New Hospet world is not currently connected'}
+            >
+              ENTER NEW HOSPET
+            </button>
+            {!externalWorldConnected && (
+              <span className="world-entry-note">WORLD OFFLINE — CONFIGURE VITE_TYPE2_WORLD_URL</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* EXTERNAL WORLD TRANSITION OVERLAY — the cinematic handoff experience */}
+      {externalWorld && externalWorld.status !== 'idle' && (
+        <div className="world-handoff-overlay pointer-events-auto animate-fade-in">
+          <div className="world-handoff-fade" />
+          <div className="world-handoff-content">
+            {externalWorld.status === 'error' ? (
+              <>
+                <div className="world-handoff-error-icon">⚠</div>
+                <div className="world-handoff-title text-rose-300">
+                  NEW HOSPET // WORLD NOT REACHABLE
+                </div>
+                <div className="world-handoff-sub">
+                  {externalWorld.message || 'The New Hospet world could not be reached.'}
+                </div>
+                <div className="world-handoff-actions">
+                  <button
+                    onClick={() => onCancelWorldHandoff && onCancelWorldHandoff()}
+                    className="prompt-btn-enter"
+                  >
+                    RETURN TO EXPLORER
+                  </button>
+                </div>
+              </>
+            ) : externalWorld.status === 'returning' ? (
+              <>
+                <div className="world-handoff-title text-emerald-300">
+                  RETURNING TO AQUILA // TYPE-II PLANET ORBIT
+                </div>
+                <div className="world-handoff-sub">
+                  RESTORING SPACECRAFT STATE & UNIVERSE POSITION
+                </div>
+                <div className="world-handoff-progress"><span className="world-handoff-progress-bar returning" /></div>
+              </>
+            ) : externalWorld.status === 'entered' ? (
+              <>
+                <div className="world-handoff-title text-amber-300">
+                  {activeExternalManifest?.displayName.toUpperCase() ?? 'NEW HOSPET'} // TYPE-II CIVILIZATION
+                </div>
+                <div className="world-handoff-sub">
+                  WORLD ACTIVE — THE PLAYER HAS ARRIVED IN THE EXTERNAL TYPE-II WORLD
+                </div>
+                <div className="world-handoff-note">
+                  RETURN WHEN READY — THE EXPLORER RESTORES YOUR ORBIT AUTOMATICALLY
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="world-handoff-title text-amber-300">
+                  NEW HOSPET // TYPE-II CIVILIZATION
+                </div>
+                <div className="world-handoff-sub">
+                  WORLD INITIALIZING... ESTABLISHING ENTRY VECTOR • {(
+                    externalWorld.arrivalMode || 'orbit'
+                  ).toUpperCase()} ARRIVAL
+                </div>
+                <div className="world-handoff-progress"><span className="world-handoff-progress-bar" /></div>
+                <div className="world-handoff-note">
+                  {externalWorld.status === 'preparing' ? 'PREPARING TRANSITION' : 'LAUNCHING EXTERNAL WORLD'}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
@@ -918,26 +1069,33 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
                   <span className="galaxy-nav-name">{planet.name}</span>
                   {isEarthLike && <span className="earth-tag">EARTH-ANALOG</span>}
                   {planet.surfaceExplore && <span className="landable-tag">HABITABLE</span>}
+                  {planet.externalWorldId && <span className="landable-tag type2-tag">TYPE-II</span>}
                   {moonCount > 0 && <span className="moon-count-tag">{moonCount}M</span>}
                 </button>
               );
             })}
           </div>
         </nav>
-      ) : isPrimeGalaxy || isIC1579 ? (
-        /* Populated-Galaxy Star System Quick-Focus Bar (Prime + IC 1579) */
+      ) : isPrimeGalaxy || isIC1579 || isAquila ? (
+        /* Populated-Galaxy Star System Quick-Focus Bar (Prime + IC 1579 + AQUILA) */
         <nav className="cosmic-navigator-bar pointer-events-auto">
           <div className="system-navigator-header">
-            <span className={`system-title-tag ${isIC1579 ? 'text-emerald-300' : 'text-purple-300'}`}>
+            <span className={`system-title-tag ${isIC1579 ? 'text-emerald-300' : isAquila ? 'text-amber-300' : 'text-purple-300'}`}>
               <Sparkles className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
               {isIC1579
-                ? 'IC 1579 EMERALD DEEP-SPIRAL // 11 DISCOVERABLE SYSTEMS • 6 HABITABLE WORLDS'
+                ? 'SIRAN GALAXY // IC 1579 EMERALD DEEP-SPIRAL // 12 DISCOVERABLE SYSTEMS • 7 HABITABLE WORLDS'
+                : isAquila
+                ? 'AQUILA // TYPE-II GATEWAY GALAXY // 1 STAR SYSTEM • EXTERNAL WORLD DESTINATION'
                 : 'PRIME GALAXY STELLAR SYSTEMS (4 SYSTEMS DISCOVERABLE)'}
             </span>
           </div>
 
           <div className="galaxy-pills-scroll">
-            {(isIC1579 ? getStarSystemsForGalaxy('galaxy17') : PRIME_GALAXY_STAR_SYSTEMS).map((sys, idx) => {
+            {(isIC1579
+              ? getStarSystemsForGalaxy('galaxy17')
+              : isAquila
+              ? getStarSystemsForGalaxy('AQUILA')
+              : PRIME_GALAXY_STAR_SYSTEMS).map((sys, idx) => {
               const sysTag = isIC1579
                 ? sys.discoveryTag === 'flagship'
                   ? 'FLAGSHIP'
@@ -951,6 +1109,8 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
                   ? 'HALO'
                   : sys.discoveryTag === 'core-vicinity'
                   ? 'CORE'
+                  : sys.discoveryTag === 'aerthelgard'
+                  ? 'SIRAN CORE'
                   : undefined
                 : undefined;
               return (
@@ -1062,14 +1222,14 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
               : activeMoon
               ? `INSPECTING ${activeMoon.name.toUpperCase()} (MOON OF ${activePlanet?.name.toUpperCase()}) • DRAG — ORBIT • ESC / BACK — EXIT MOON`
               : activePlanet
-              ? `INSPECTING ${activePlanet.name.toUpperCase()} • CLICK MOONS TO DIVE IN${activePlanet.surfaceExplore ? ' • DESCEND TO SURFACE FOR THE NIGHT SKY' : ''} • ESC / BACK — EXIT WORLD`
+              ? `INSPECTING ${activePlanet.name.toUpperCase()} • ${activePlanet.externalWorldId ? 'ENTER NEW HOSPET — EXTERNAL TYPE-II WORLD • ' : ''}CLICK MOONS TO DIVE IN${activePlanet.surfaceExplore ? ' • DESCEND TO SURFACE FOR THE NIGHT SKY' : ''} • ESC / BACK — EXIT WORLD`
               : activeSystem
               ? `STAR SYSTEM // ${activeSystem.name.toUpperCase()} • CLICK PLANETS TO DIVE IN • ESC / BACK — EXIT TO GALAXY`
               : isIC1579
               ? `IC 1579 // EMERALD DEEP SPIRAL • DIVE INTO DISCOVERABLE SYSTEMS (11) & HABITABLE WORLDS (6) • C / DOUBLE-CLICK — INSPECT CORE • R — LEAVE GALAXY / RETURN TO AETHER`
               : universeState.detectedBlackHole
               ? `SUPERMASSIVE BLACK HOLE FIELD • GRAVITATIONAL LENSING & WARPED ACCRETION ARCS • C / DOUBLE-CLICK — INSPECT CORE`
-              : 'ZOOM INTO PRIME GALAXY FOR STAR SYSTEMS OR TRAVEL TO GALAXIES [02–16] FOR SUPERMASSIVE BLACK HOLES'}
+              : 'ZOOM INTO PRIME GALAXY FOR STAR SYSTEMS, TRAVEL TO GALAXIES [02–16] FOR SUPERMASSIVE BLACK HOLES, OR TO AQUILA FOR THE TYPE-II WORLD'}
           </span>
         </div>
 

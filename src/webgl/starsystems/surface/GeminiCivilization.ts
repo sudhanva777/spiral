@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import type { PlanetConfig } from '../../../types/starSystem';
-import { GEMINI_CITY_DIRS, EMERIA_CITY_INDEX } from './cityDirs';
+import type { CivilTheme, PlanetConfig } from '../../../types/starSystem';
+import { getCapitalCityDir } from './cityDirs';
 
 // ============================================================================
 // GEMINI LIVING WORLD — capital city "Emeria" and the civilization around it.
@@ -195,11 +195,17 @@ const CITY_HALF = 160; // meters, city half-extent
 const GRID = 8; // blocks per side
 const STREET_Y = 0.25; // meters above terrain for walkers
 
-function makePersona(npcCount: number): number[] {
+function makePersona(npcCount: number, personaCount: number): number[] {
   const out: number[] = [];
-  for (let i = 0; i < npcCount; i++) out.push(i % PERSONAS.length);
+  for (let i = 0; i < npcCount; i++) out.push(i % personaCount);
   return out;
 }
+
+// Theme colors: when a planet declares a CivilTheme (AERTHELGARD: New
+// Hospet), the whole city rebuilds in its palette, personas and structures.
+// With no theme the classic GEMINI emerald Emeria is used unchanged.
+type ThemeStr = { name: string; title: string; lines: string[] };
+type StructureDef = { id: string; name: string; title: string; lines: string[] };
 
 export class GeminiCivilization {
   public frame: THREE.Group;
@@ -209,6 +215,11 @@ export class GeminiCivilization {
   private readonly UM: number;
   private readonly parent: THREE.Group;
   private readonly sampleTerrain: (dir: THREE.Vector3) => number;
+  private readonly theme?: CivilTheme;
+  private readonly personas: ThemeStr[];
+  private readonly structures: StructureDef[];
+  private readonly themeHue: number;
+  private readonly npcHue: number;
 
   private axisX = new THREE.Vector3(1, 0, 0);
   private axisZ = new THREE.Vector3(0, 0, 1);
@@ -276,10 +287,18 @@ export class GeminiCivilization {
     this.UM = this.R * 0.0011;
     this.parent = parent;
     this.sampleTerrain = sampleTerrain;
-    this.cityLocalDir = GEMINI_CITY_DIRS[EMERIA_CITY_INDEX].clone().normalize();
+    this.theme = config.cityTheme;
+    this.personas = config.cityTheme?.personas ?? PERSONAS;
+    this.structures = config.cityTheme?.structures ?? STRUCTURE_DIALOGUES;
+    const themeGlow = new THREE.Color(config.cityTheme?.glow ?? '#CFFFE0');
+    const themeHsl = { h: 0, s: 0, l: 0 };
+    themeGlow.getHSL(themeHsl);
+    this.themeHue = config.cityTheme ? themeHsl.h : 0.32;
+    this.npcHue = config.cityTheme ? themeHsl.h : 0.3;
+    this.cityLocalDir = getCapitalCityDir(config).clone().normalize();
 
     this.frame = new THREE.Group();
-    this.frame.name = 'GeminiCivilization-Emeria';
+    this.frame.name = config.cityTheme ? `Civilization-${config.cityTheme.name}` : 'GeminiCivilization-Emeria';
     this.frame.position.copy(this.cityLocalDir).multiplyScalar(this.R * 1.004);
     this.frame.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), this.cityLocalDir);
     this.frameOrigin.copy(this.frame.position);
@@ -287,8 +306,8 @@ export class GeminiCivilization {
     this.axisZ.set(0, 0, 1).applyQuaternion(this.frame.quaternion);
 
     // Stylized sun — matches the sky shader's day/night cycle so the city
-    // darkens as the green sun sets (emissive windows take over at night).
-    this.light = new THREE.DirectionalLight(0xeafff0, 1);
+    // darkens as the sun sets (emissive windows take over at night).
+    this.light = new THREE.DirectionalLight(new THREE.Color(config.cityTheme?.light ?? '#eafff0'), 1);
     this.light.position.copy(this.cityLocalDir).multiplyScalar(2.5);
     this.frame.add(this.light);
 
@@ -329,19 +348,20 @@ export class GeminiCivilization {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const pxPerM = 512 / (CITY_HALF * 2);
+    const t = this.theme;
 
-    ctx.fillStyle = '#10140F';
+    ctx.fillStyle = t?.ground ?? '#10140F';
     ctx.fillRect(0, 0, 512, 512);
 
     // streets (lighter asphalt)
-    ctx.fillStyle = '#2A3229';
+    ctx.fillStyle = t?.street ?? '#2A3229';
     for (let i = 0; i <= GRID; i++) {
       const p = Math.round(((i - GRID / 2) * BLOCK_PITCH + CITY_HALF) * pxPerM);
       ctx.fillRect(p - 3, 0, 6, 512);
       ctx.fillRect(0, p - 3, 512, 6);
     }
     // blocks (dark ground)
-    ctx.fillStyle = '#191E18';
+    ctx.fillStyle = t?.ground ?? '#191E18';
     for (let i = 0; i < GRID; i++) {
       for (let j = 0; j < GRID; j++) {
         if (i >= 3 && i <= 4 && j >= 3 && j <= 4) continue; // central plaza
@@ -352,7 +372,7 @@ export class GeminiCivilization {
       }
     }
     // park patches
-    ctx.fillStyle = '#142A17';
+    ctx.fillStyle = t?.park ?? '#142A17';
     for (let k = 0; k < 14; k++) {
       const x = Math.round(Math.random() * 512);
       const y = Math.round(Math.random() * 512);
@@ -362,19 +382,19 @@ export class GeminiCivilization {
     // central plaza
     const cx = 256;
     const cy = 256;
-    ctx.fillStyle = '#232C24';
+    ctx.fillStyle = t?.plaza ?? '#232C24';
     ctx.beginPath();
     ctx.arc(cx, cy, 52, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#39443A';
+    ctx.strokeStyle = t?.street ?? '#39443A';
     ctx.lineWidth = 5;
     ctx.stroke();
-    ctx.fillStyle = '#1B241C';
+    ctx.fillStyle = t?.ground ?? '#1B241C';
     ctx.beginPath();
     ctx.arc(cx, cy, 40, 0, Math.PI * 2);
     ctx.fill();
     // tether mooring ring (north plaza edge)
-    ctx.strokeStyle = '#4A5A4C';
+    ctx.strokeStyle = t?.street ?? '#4A5A4C';
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.arc(cx, cy - 70, 12, 0, Math.PI * 2);
@@ -417,7 +437,7 @@ export class GeminiCivilization {
     const maxBuildings = 200;
     this.buildingMat = new THREE.MeshLambertMaterial({
       map: this.windowTexture,
-      emissive: 0xffffff,
+      emissive: new THREE.Color(this.theme?.window ?? '#ffffff'),
       emissiveMap: this.windowTexture,
       emissiveIntensity: 0.12,
     });
@@ -453,7 +473,7 @@ export class GeminiCivilization {
           m.copy(tr).multiply(rot).multiply(sc);
           this.buildingMesh.setMatrixAt(placed, m);
           const lum = 0.45 + rng() * 0.4;
-          col.setHSL(0.32 + rng() * 0.08, 0.12 + rng() * 0.2, lum);
+          col.setHSL(this.themeHue + rng() * 0.08, 0.12 + rng() * 0.2, lum);
           this.buildingMesh.setColorAt(placed, col);
           this.buildingFootprints.push({ cx: bx, cz: bz, rx: sw / 2, rz: sd / 2, h });
           placed++;
@@ -475,7 +495,7 @@ export class GeminiCivilization {
     this.lampGlow = new THREE.InstancedMesh(
       new THREE.SphereGeometry(0.12, 6, 4),
       new THREE.MeshBasicMaterial({
-        color: 0xffe8b0,
+        color: new THREE.Color(this.theme?.glow ?? '#ffe8b0'),
         transparent: true,
         opacity: 0.9,
         blending: THREE.AdditiveBlending,
@@ -507,7 +527,7 @@ export class GeminiCivilization {
   private buildSails() {
     const count = 8;
     this.sailMat = new THREE.MeshBasicMaterial({
-      color: 0xd8ffea,
+      color: new THREE.Color(this.theme?.accent ?? '#d8ffea'),
       transparent: true,
       opacity: 0.85,
       blending: THREE.AdditiveBlending,
@@ -536,7 +556,7 @@ export class GeminiCivilization {
   private buildNpcs() {
     const rng = mulberry32(7741);
     const npcCount = 26;
-    const personas = makePersona(npcCount);
+    const personas = makePersona(npcCount, this.personas.length);
 
     const headGeo = new THREE.BoxGeometry(0.34, 0.3, 0.3);
     const torsoGeo = new THREE.BoxGeometry(0.42, 0.55, 0.24);
@@ -604,8 +624,8 @@ export class GeminiCivilization {
       };
       this.npcSims.push(sim);
       // instance colors for tunic/pants/skin
-      const tunic = new THREE.Color().setHSL(0.3 + rng() * 0.16, 0.35 + rng() * 0.3, 0.4 + rng() * 0.25);
-      const pants = new THREE.Color().setHSL(0.28 + rng() * 0.1, 0.25, 0.22 + rng() * 0.15);
+      const tunic = new THREE.Color().setHSL(this.npcHue + rng() * 0.16, 0.35 + rng() * 0.3, 0.4 + rng() * 0.25);
+      const pants = new THREE.Color().setHSL(this.npcHue - 0.02 + rng() * 0.1, 0.25, 0.22 + rng() * 0.15);
       const skin = new THREE.Color().setHSL(0.08 + rng() * 0.03, 0.45 + rng() * 0.2, 0.62 + rng() * 0.14);
       const torso = this.npcParts[3];
       const armL = this.npcParts[4];
@@ -680,7 +700,7 @@ export class GeminiCivilization {
         walkPhase: a,
       };
       this.robotSims.push(sim);
-      body.setColorAt(i, new THREE.Color(0x9fe8c4));
+      body.setColorAt(i, new THREE.Color(this.theme?.accent ?? '#9fe8c4'));
     }
     body.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     glow.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -777,7 +797,7 @@ export class GeminiCivilization {
       { radius: 180, alt: 90, speed: 4.5 },
     ];
     this.podMat = new THREE.MeshBasicMaterial({
-      color: 0xc8ffe0,
+      color: new THREE.Color(this.theme?.accent ?? '#c8ffe0'),
       transparent: true,
       opacity: 0.9,
       blending: THREE.AdditiveBlending,
@@ -825,11 +845,11 @@ export class GeminiCivilization {
     const baseY = this.groundYAt(anchorX, anchorZ);
     const tetherLen = 3.1; // scene units — straight up into space
     const colGeo = new THREE.CylinderGeometry(0.0016, 0.0045, tetherLen, 6, 1, true);
-    const colMat = new THREE.MeshBasicMaterial({ color: 0x3a4a40, side: THREE.DoubleSide });
+    const colMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(this.theme?.street ?? '#3a4a40'), side: THREE.DoubleSide });
     const column = new THREE.Mesh(colGeo, colMat);
     const stripGeo = new THREE.CylinderGeometry(0.0006, 0.0016, tetherLen, 4, 1, true);
     const stripMat = new THREE.MeshBasicMaterial({
-      color: 0xd8ffea,
+      color: new THREE.Color(this.theme?.accent ?? '#d8ffea'),
       transparent: true,
       opacity: 0.35,
       blending: THREE.AdditiveBlending,
@@ -857,7 +877,7 @@ export class GeminiCivilization {
 
     // ascending day-cab
     this.tetherPodMat = new THREE.MeshBasicMaterial({
-      color: 0xffe8b0,
+      color: new THREE.Color(this.theme?.glow ?? '#ffe8b0'),
       transparent: true,
       opacity: 0.95,
       blending: THREE.AdditiveBlending,
@@ -869,7 +889,7 @@ export class GeminiCivilization {
     // mooring ring at the base
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.006, 0.0009, 6, 24),
-      new THREE.MeshBasicMaterial({ color: 0x5a6a5c, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(this.theme?.street ?? '#5a6a5c'), side: THREE.DoubleSide })
     );
     ring.position.y = baseY * this.UM;
     ring.rotation.x = Math.PI / 2;
@@ -882,9 +902,9 @@ export class GeminiCivilization {
   // Spaceport — pads, parked shuttles, launching traffic
   // ---------------------------------------------------------------------
   private buildSpaceport() {
-    const padMat = new THREE.MeshBasicMaterial({ color: 0x2a3229 });
+    const padMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(this.theme?.street ?? '#2a3229') });
     const padRingMat = new THREE.MeshBasicMaterial({
-      color: 0x9fe8c4,
+      color: new THREE.Color(this.theme?.accent ?? '#9fe8c4'),
       transparent: true,
       opacity: 0.8,
       blending: THREE.AdditiveBlending,
@@ -934,7 +954,7 @@ export class GeminiCivilization {
     wing.position.y = -0.32;
     if (!this.shuttleGlowMat) {
       this.shuttleGlowMat = new THREE.MeshBasicMaterial({
-        color: 0xb8ffe0,
+        color: new THREE.Color(this.theme?.accent ?? '#b8ffe0'),
         transparent: true,
         opacity: 0.8,
         blending: THREE.AdditiveBlending,
@@ -957,9 +977,10 @@ export class GeminiCivilization {
     canvas.height = 64;
     const ctx = canvas.getContext('2d');
     if (ctx) {
+      const mistCol = new THREE.Color(this.theme?.accent ?? '#BEEBD2');
       const grad = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
-      grad.addColorStop(0, 'rgba(190,235,210,0.55)');
-      grad.addColorStop(1, 'rgba(190,235,210,0)');
+      grad.addColorStop(0, `rgba(${Math.round(mistCol.r * 255)},${Math.round(mistCol.g * 255)},${Math.round(mistCol.b * 255)},0.55)`);
+      grad.addColorStop(1, `rgba(${Math.round(mistCol.r * 255)},${Math.round(mistCol.g * 255)},${Math.round(mistCol.b * 255)},0)`);
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, 64, 64);
     }
@@ -987,7 +1008,11 @@ export class GeminiCivilization {
       this.frame.add(spr);
     }
     // fountain
-    const fMat = new THREE.MeshBasicMaterial({ color: 0x9fe8c4, transparent: true, opacity: 0.6 });
+    const fMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(this.theme?.accent ?? '#9fe8c4'),
+      transparent: true,
+      opacity: 0.6,
+    });
     const fountain = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.2, 1.6, 12), fMat);
     const gy = this.groundYAt(0, 0) + 0.8;
     fountain.position.set(0, gy * this.UM, 0);
@@ -1272,7 +1297,7 @@ export class GeminiCivilization {
         npc.pos.z * this.UM
       );
       this.frame.localToWorld(this.npcWorldPos);
-      const persona = PERSONAS[npc.persona % PERSONAS.length];
+      const persona = this.personas[npc.persona % this.personas.length];
       out.push({
         kind: 'npc',
         id: `npc-${i}`,
@@ -1284,12 +1309,20 @@ export class GeminiCivilization {
       });
     }
 
+    const dronePersona =
+      this.personas.find((p) => p.title === 'Delivery Drone') ??
+      this.personas[Math.min(4, this.personas.length - 1)];
+    const securityPersona = this.personas.find((p) => p.title === 'Security Patrol Unit');
     const robotLines = {
-      drone: { name: 'Jot', title: 'Delivery Drone', lines: PERSONAS[4].lines },
+      drone: {
+        name: dronePersona?.name ?? 'Jot',
+        title: 'Delivery Drone',
+        lines: dronePersona?.lines ?? PERSONAS[4].lines,
+      },
       security: {
-        name: 'KR-77',
+        name: securityPersona?.name ?? 'KR-77',
         title: 'Security Patrol Unit',
-        lines: [
+        lines: securityPersona?.lines ?? [
           'Patrol complete. Perimeter calm. Continue your evening, citizen.',
           'My sensors read one anomaly: you. Welcome to Emeria.',
         ],
@@ -1315,10 +1348,10 @@ export class GeminiCivilization {
       });
     }
 
-    const structures: { x: number; z: number; def: (typeof STRUCTURE_DIALOGUES)[number] }[] = [
-      { x: 96, z: 96, def: STRUCTURE_DIALOGUES[0] },
-      { x: -140, z: -140, def: STRUCTURE_DIALOGUES[1] },
-      { x: 0, z: 0, def: STRUCTURE_DIALOGUES[2] },
+    const structures: { x: number; z: number; def: StructureDef }[] = [
+      { x: 96, z: 96, def: this.structures[0] },
+      { x: -140, z: -140, def: this.structures[1] },
+      { x: 0, z: 0, def: this.structures[2] },
     ];
     for (const s of structures) {
       this.npcWorldPos.set(

@@ -34,6 +34,12 @@ export interface MoonConfig {
   craterDensity?: number;
   isVolcanic?: boolean;
   isIcy?: boolean;
+  // AERTHELGARD: procedurally displaced potato-like geometry (captured
+  // irregular body) instead of a perfect sphere.
+  irregular?: boolean;
+  // AERTHELGARD: golden metallic appearance — warm specular sheen and a
+  // faint warm emissive contribution, lit primarily by reflected sunlight.
+  golden?: boolean;
 }
 
 export interface AsteroidBeltConfig {
@@ -84,7 +90,44 @@ export type StarSystemDiscoveryTag =
   | 'sentinel'
   | 'halo-remnant'
   | 'core-vicinity'
+  | 'aerthelgard'
   | null;
+
+// ============================================================================
+// AERTHELGARD — TYPE-I CIVILIZATION THEME
+// ============================================================================
+
+// A named citizen with dialogue, used by the surface civilization module.
+export interface CivilPersona {
+  name: string;
+  title: string;
+  lines: string[];
+}
+
+// An interactable structure (tether base, spaceport, plaza…) with dialogue.
+export interface CivilStructure {
+  id: string;
+  name: string;
+  title: string;
+  lines: string[];
+}
+
+// Per-planet civilization visual identity. When omitted, worlds keep the
+// classic GEMINI emerald palette, Emeria personas and structure dialogues.
+export interface CivilTheme {
+  name: string; // capital city name, e.g. 'New Hospet'
+  ground: string; // dark ground / block fill
+  street: string; // road surface
+  park: string; // park patches
+  plaza: string; // central plaza fill
+  window: string; // building window emissive tint
+  glow: string; // city glow tint (orbit lights + sky horizon glow)
+  shadow: string; // skyline silhouette color
+  light: string; // directional light tint
+  accent: string; // accent details: lamp glow, sails, pads, fountain
+  personas?: CivilPersona[];
+  structures?: CivilStructure[];
+}
 
 export interface PlanetConfig {
   id: string;
@@ -136,6 +179,18 @@ export interface PlanetConfig {
   // GEMINI: render the living civilization — orbit night lights, horizon
   // city glows, and the capital with NPCs, robots and air traffic
   surfaceCivilization?: boolean;
+  // AERTHELGARD: civilization city directions in planet model space
+  // (axialGroup space). Omit → GEMINI city dirs.
+  cityDirs?: [number, number, number][];
+  // AERTHELGARD: index of the capital city inside cityDirs. Omit → 0.
+  cityCapitalIndex?: number;
+  // AERTHELGARD: visual identity of the surface civilization (capital name,
+  // palette, personas). Omit → classic GEMINI Emeria theme.
+  cityTheme?: CivilTheme;
+  // AQUILA: this planet is the astronomical anchor of an EXTERNAL world
+  // registered in the world registry (e.g. NEW-HOSPET-001). The Galaxy
+  // Explorer only provides orbit-level representation and the handoff.
+  externalWorldId?: string;
 }
 
 export interface StarConfig {
